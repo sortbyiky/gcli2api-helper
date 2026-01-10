@@ -143,6 +143,28 @@
             font-size: 13px;
         }
 
+        /* Loading state for buttons */
+        .btn.loading {
+            position: relative;
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        .btn.loading::after {
+            content: '';
+            position: absolute;
+            width: 14px;
+            height: 14px;
+            border: 2px solid transparent;
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
         /* Input Styles */
         input[type="text"], input[type="password"], input[type="number"], select {
             border: 1px solid var(--border);
@@ -344,7 +366,13 @@
     <div class="container mx-auto px-4 py-8 max-w-7xl">
         <!-- Header -->
         <div class="flex items-center justify-between mb-8">
-            <h1 class="text-2xl font-bold text-slate-800">gcli2api-helper</h1>
+            <div class="flex items-center gap-4">
+                <h1 class="text-2xl font-bold text-slate-800">gcli2api-helper</h1>
+                <div id="version-info" class="flex items-center gap-2">
+                    <span id="version-text" class="text-xs text-slate-500"></span>
+                    <button onclick="checkUpdate()" id="btn-check-update" class="text-xs text-blue-500 hover:text-blue-700 underline hidden">检查更新</button>
+                </div>
+            </div>
             <div class="sse-status" id="sse-status">
                 <span class="sse-dot" id="sse-dot"></span>
                 <span id="sse-text">未连接</span>
@@ -374,7 +402,7 @@
                         <input type="password" id="gcli-password" placeholder="••••••">
                     </div>
                     <div class="flex items-end gap-3">
-                        <button onclick="connect()" class="btn btn-primary">连接</button>
+                        <button onclick="connect()" id="btn-connect" class="btn btn-primary">连接</button>
                         <span id="connection-status" class="text-sm"></span>
                     </div>
                 </div>
@@ -397,8 +425,8 @@
                         <input type="text" id="auto-verify-codes" value="403">
                     </div>
                     <div class="flex items-end gap-2">
-                        <button onclick="saveConfig()" class="btn btn-success btn-sm">保存</button>
-                        <button onclick="triggerVerify()" class="btn btn-warning btn-sm">立即检验</button>
+                        <button onclick="saveConfig()" id="btn-save-config" class="btn btn-success btn-sm">保存</button>
+                        <button onclick="triggerVerify()" id="btn-trigger-verify" class="btn btn-warning btn-sm">立即检验</button>
                     </div>
                 </div>
                 <div id="verify-status" class="text-sm text-slate-600 mb-4"></div>
@@ -424,7 +452,7 @@
                             <button onclick="setLayout('compact')" id="layout-compact" class="layout-btn">简洁</button>
                         </div>
                         <span id="quota-cache-info" class="text-xs text-slate-500"></span>
-                        <button onclick="refreshQuota()" class="btn btn-primary btn-sm">刷新</button>
+                        <button onclick="refreshQuota()" id="btn-refresh-quota" class="btn btn-primary btn-sm">刷新</button>
                     </div>
                 </div>
                 <div id="quota-cards" class="card-grid"></div>
@@ -446,9 +474,9 @@
                             <input type="checkbox" id="log-auto-scroll" checked>
                             自动滚动
                         </label>
-                        <button onclick="downloadLogs()" class="btn btn-success btn-sm">下载</button>
-                        <button onclick="clearLogs()" class="btn btn-secondary btn-sm">清空</button>
-                        <button onclick="refreshLogs()" class="btn btn-primary btn-sm">刷新</button>
+                        <button onclick="downloadLogs()" id="btn-download-logs" class="btn btn-success btn-sm">下载</button>
+                        <button onclick="clearLogs()" id="btn-clear-logs" class="btn btn-secondary btn-sm">清空</button>
+                        <button onclick="refreshLogs()" id="btn-refresh-logs" class="btn btn-primary btn-sm">刷新</button>
                     </div>
                 </div>
                 <div id="log-container" class="log-container"></div>
@@ -467,12 +495,71 @@
         let filteredLogs = [];
         let eventSource = null;
 
+        // Loading state helper
+        function setLoading(btnId, loading) {
+            const btn = document.getElementById(btnId);
+            if (!btn) return;
+            if (loading) {
+                btn.classList.add('loading');
+                btn.disabled = true;
+            } else {
+                btn.classList.remove('loading');
+                btn.disabled = false;
+            }
+        }
+
         async function api(path, options = {}) {
             const resp = await fetch(API_BASE + path, {
                 headers: { 'Content-Type': 'application/json' },
                 ...options
             });
             return resp.json();
+        }
+
+        // Version functions
+        async function loadVersion() {
+            try {
+                const data = await api('/api/version');
+                if (data.success) {
+                    const versionText = document.getElementById('version-text');
+                    const checkBtn = document.getElementById('btn-check-update');
+                    versionText.textContent = `v${data.version}`;
+                    versionText.title = `${data.message}\n${data.date}`;
+                    checkBtn.classList.remove('hidden');
+                }
+            } catch (e) {
+                console.error('Failed to load version:', e);
+            }
+        }
+
+        async function checkUpdate() {
+            const btn = document.getElementById('btn-check-update');
+            const originalText = btn.textContent;
+            btn.textContent = '检查中...';
+            btn.disabled = true;
+
+            try {
+                const data = await api('/api/version?check_update=true');
+                if (data.success && data.check_update) {
+                    if (data.has_update) {
+                        const msg = `发现新版本！\n\n当前版本: ${data.version}\n最新版本: ${data.latest_version}\n\n更新内容: ${data.latest_message}\n发布时间: ${data.latest_date}\n\n请使用 git pull 更新`;
+                        alert(msg);
+                        btn.textContent = '有更新';
+                        btn.classList.add('text-red-500');
+                    } else {
+                        alert('当前已是最新版本');
+                        btn.textContent = '已是最新';
+                    }
+                } else {
+                    alert('检查更新失败: ' + (data.update_error || '未知错误'));
+                    btn.textContent = originalText;
+                }
+            } catch (e) {
+                alert('检查更新失败: ' + e.message);
+                btn.textContent = originalText;
+            } finally {
+                btn.disabled = false;
+            }
         }
 
         // SSE Connection
@@ -576,6 +663,7 @@
         async function connect() {
             const url = document.getElementById('gcli-url').value;
             const password = document.getElementById('gcli-password').value;
+            setLoading('btn-connect', true);
             try {
                 const data = await api('/api/connect', {
                     method: 'POST',
@@ -590,22 +678,29 @@
                 }
             } catch (e) {
                 alert('连接失败: ' + e.message);
+            } finally {
+                setLoading('btn-connect', false);
             }
         }
 
         async function saveConfig() {
             const codes = document.getElementById('auto-verify-codes').value
                 .split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
-            const data = await api('/api/config', {
-                method: 'POST',
-                body: JSON.stringify({
-                    auto_verify_enabled: document.getElementById('auto-verify-enabled').checked,
-                    auto_verify_interval: parseInt(document.getElementById('auto-verify-interval').value),
-                    auto_verify_error_codes: codes
-                })
-            });
-            if (data.success) {
-                loadVerifyStatus();
+            setLoading('btn-save-config', true);
+            try {
+                const data = await api('/api/config', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        auto_verify_enabled: document.getElementById('auto-verify-enabled').checked,
+                        auto_verify_interval: parseInt(document.getElementById('auto-verify-interval').value),
+                        auto_verify_error_codes: codes
+                    })
+                });
+                if (data.success) {
+                    loadVerifyStatus();
+                }
+            } finally {
+                setLoading('btn-save-config', false);
             }
         }
 
@@ -639,21 +734,33 @@
         }
 
         async function triggerVerify() {
-            const data = await api('/api/verify/trigger', { method: 'POST' });
-            if (data.success) {
-                alert(`检验完成: ${data.verified}/${data.total} 个凭证`);
-                loadVerifyHistory();
-            } else {
-                alert('检验失败: ' + (data.detail || data.message));
+            setLoading('btn-trigger-verify', true);
+            try {
+                const data = await api('/api/verify/trigger', { method: 'POST' });
+                if (data.success) {
+                    alert(`检验完成: ${data.verified}/${data.total} 个凭证`);
+                    loadVerifyHistory();
+                } else {
+                    alert('检验失败: ' + (data.detail || data.message));
+                }
+            } catch (e) {
+                alert('检验失败: ' + e.message);
+            } finally {
+                setLoading('btn-trigger-verify', false);
             }
         }
 
         // Logs functions
         async function refreshLogs() {
-            const data = await api('/api/verify/history');
-            if (data.success) {
-                allLogs = data.history;
-                filterLogs();
+            setLoading('btn-refresh-logs', true);
+            try {
+                const data = await api('/api/verify/history');
+                if (data.success) {
+                    allLogs = data.history;
+                    filterLogs();
+                }
+            } finally {
+                setLoading('btn-refresh-logs', false);
             }
         }
 
@@ -718,34 +825,44 @@
         }
 
         async function downloadLogs() {
-            const resp = await fetch('/api/verify/history/download');
-            if (resp.ok) {
-                const contentDisposition = resp.headers.get('Content-Disposition');
-                let filename = 'gcli2api-helper_logs.txt';
-                if (contentDisposition) {
-                    const match = contentDisposition.match(/filename=(.+)/);
-                    if (match) filename = match[1];
+            setLoading('btn-download-logs', true);
+            try {
+                const resp = await fetch('/api/verify/history/download');
+                if (resp.ok) {
+                    const contentDisposition = resp.headers.get('Content-Disposition');
+                    let filename = 'gcli2api-helper_logs.txt';
+                    if (contentDisposition) {
+                        const match = contentDisposition.match(/filename=(.+)/);
+                        if (match) filename = match[1];
+                    }
+                    const blob = await resp.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                } else {
+                    alert('下载失败');
                 }
-                const blob = await resp.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                a.click();
-                window.URL.revokeObjectURL(url);
-            } else {
-                alert('下载失败');
+            } finally {
+                setLoading('btn-download-logs', false);
             }
         }
 
         async function clearLogs() {
             if (!confirm('确定要清空所有日志吗？')) return;
-            const data = await api('/api/verify/history/clear', { method: 'POST' });
-            if (data.success) {
-                allLogs = [];
-                filteredLogs = [];
-                displayLogs();
-                loadVerifyHistory();
+            setLoading('btn-clear-logs', true);
+            try {
+                const data = await api('/api/verify/history/clear', { method: 'POST' });
+                if (data.success) {
+                    allLogs = [];
+                    filteredLogs = [];
+                    displayLogs();
+                    loadVerifyHistory();
+                }
+            } finally {
+                setLoading('btn-clear-logs', false);
             }
         }
 
@@ -759,10 +876,15 @@
         }
 
         async function refreshQuota() {
-            const data = await api('/api/quota/refresh', { method: 'POST' });
-            quotaData = data;
-            updateFilterOptions();
-            renderQuota(data);
+            setLoading('btn-refresh-quota', true);
+            try {
+                const data = await api('/api/quota/refresh', { method: 'POST' });
+                quotaData = data;
+                updateFilterOptions();
+                renderQuota(data);
+            } finally {
+                setLoading('btn-refresh-quota', false);
+            }
         }
 
         function updateFilterOptions() {
@@ -927,6 +1049,7 @@
 
         // Initial load
         document.addEventListener('DOMContentLoaded', () => {
+            loadVersion();
             loadConfig();
             connectSSE();
             setInterval(loadVerifyStatus, 30000);

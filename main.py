@@ -276,6 +276,70 @@ async def api_status():
     }
 
 
+@app.get("/api/version")
+async def api_version(check_update: bool = False):
+    """Get version info and optionally check for updates"""
+    import httpx
+
+    project_root = Path(__file__).parent
+    version_file = project_root / "version.txt"
+
+    if not version_file.exists():
+        return {"success": False, "error": "version.txt not found"}
+
+    version_data = {}
+    with open(version_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if "=" in line:
+                key, value = line.split("=", 1)
+                version_data[key] = value
+
+    if "short_hash" not in version_data:
+        return {"success": False, "error": "Invalid version.txt format"}
+
+    response_data = {
+        "success": True,
+        "version": version_data.get("short_hash", "unknown"),
+        "full_hash": version_data.get("full_hash", ""),
+        "message": version_data.get("message", ""),
+        "date": version_data.get("date", ""),
+    }
+
+    if check_update:
+        try:
+            github_url = "https://raw.githubusercontent.com/sortbyiky/gcli2api-helper/refs/heads/master/version.txt"
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(github_url)
+                if resp.status_code == 200:
+                    remote_data = {}
+                    for line in resp.text.strip().split("\n"):
+                        line = line.strip()
+                        if "=" in line:
+                            key, value = line.split("=", 1)
+                            remote_data[key] = value
+
+                    latest_hash = remote_data.get("full_hash", "")
+                    current_hash = version_data.get("full_hash", "")
+                    has_update = (current_hash != latest_hash) if current_hash and latest_hash else None
+
+                    response_data["check_update"] = True
+                    response_data["has_update"] = has_update
+                    response_data["latest_version"] = remote_data.get("short_hash", "")
+                    response_data["latest_hash"] = latest_hash
+                    response_data["latest_message"] = remote_data.get("message", "")
+                    response_data["latest_date"] = remote_data.get("date", "")
+                else:
+                    response_data["check_update"] = False
+                    response_data["update_error"] = f"GitHub returned {resp.status_code}"
+        except Exception as e:
+            logger.debug(f"Check update failed: {e}")
+            response_data["check_update"] = False
+            response_data["update_error"] = str(e)
+
+    return response_data
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=7862)

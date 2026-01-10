@@ -1,0 +1,4 @@
+short_hash=12899c8
+full_hash=12899c8798589597cb8353889f0a0aa50e94510f
+message=feat: 集成 gcli2api 日志流和增强自动检验日志
+date=2026-01-10 23:23:16 +0800
