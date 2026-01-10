@@ -5,116 +5,424 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>gcli2api-helper</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
-        .quota-bar { height: 6px; border-radius: 3px; background: #e5e7eb; overflow: hidden; }
-        .quota-fill { height: 100%; transition: width 0.3s; }
-        .quota-high { background: #22c55e; }
-        .quota-medium { background: #eab308; }
-        .quota-low { background: #ef4444; }
-        .card-warning { border-color: #f59e0b !important; box-shadow: 0 0 0 1px #f59e0b; }
-        .card-danger { border-color: #ef4444 !important; box-shadow: 0 0 0 1px #ef4444; }
-        .tab-btn { padding: 0.5rem 1.5rem; border-radius: 0.5rem 0.5rem 0 0; cursor: pointer; transition: all 0.2s; }
-        .tab-btn.active { background: white; border-bottom: 2px solid white; margin-bottom: -2px; }
-        .tab-btn:not(.active) { background: #e5e7eb; }
-        .log-container {
-            background-color: #1e1e1e;
-            color: #ffffff;
-            font-family: 'Courier New', monospace;
+        :root {
+            --primary: #3B82F6;
+            --primary-dark: #2563EB;
+            --primary-light: #EFF6FF;
+            --success: #22C55E;
+            --danger: #EF4444;
+            --warning: #F59E0B;
+            --text-primary: #1E293B;
+            --text-secondary: #64748B;
+            --bg-page: #F8FAFC;
+            --bg-card: #FFFFFF;
+            --border: #E2E8F0;
+        }
+
+        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+
+        body { background: var(--bg-page); }
+
+        /* Modern Tab Container */
+        .tab-container {
+            display: inline-flex;
+            background: #F1F5F9;
+            border-radius: 12px;
+            padding: 4px;
+            gap: 4px;
+        }
+
+        .tab-btn {
+            padding: 10px 28px;
+            border-radius: 10px;
+            font-weight: 500;
+            font-size: 14px;
+            color: var(--text-secondary);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tab-btn.active {
+            background: var(--bg-card);
+            color: var(--primary);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .tab-btn:hover:not(.active) {
+            color: var(--primary);
+            background: rgba(59,130,246,0.08);
+        }
+
+        /* Card Styles */
+        .card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06);
+            border: 1px solid var(--border);
+            padding: 24px;
+        }
+
+        .card-header {
+            font-size: 17px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 20px;
+        }
+
+        /* Button Styles */
+        .btn {
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: 500;
+            font-size: 14px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            box-shadow: 0 2px 4px rgba(59,130,246,0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(59,130,246,0.35);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--success), #16A34A);
+            color: white;
+            box-shadow: 0 2px 4px rgba(34,197,94,0.3);
+        }
+
+        .btn-success:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(34,197,94,0.35);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, var(--warning), #D97706);
+            color: white;
+            box-shadow: 0 2px 4px rgba(245,158,11,0.3);
+        }
+
+        .btn-warning:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(245,158,11,0.35);
+        }
+
+        .btn-secondary {
+            background: #F1F5F9;
+            color: #475569;
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            background: #E2E8F0;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, var(--danger), #DC2626);
+            color: white;
+        }
+
+        .btn-sm {
+            padding: 8px 14px;
+            font-size: 13px;
+        }
+
+        /* Input Styles */
+        input[type="text"], input[type="password"], input[type="number"], select {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            background: white;
+            width: 100%;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+        }
+
+        /* Checkbox */
+        input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        /* Status Badges */
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 12px;
+            border-radius: 20px;
             font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-success { background: #DCFCE7; color: #166534; }
+        .badge-danger { background: #FEE2E2; color: #991B1B; }
+        .badge-warning { background: #FEF3C7; color: #92400E; }
+        .badge-info { background: #DBEAFE; color: #1E40AF; }
+
+        /* Log Container */
+        .log-container {
+            background: #0F172A;
+            border-radius: 12px;
+            padding: 16px;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 13px;
+            line-height: 1.7;
             height: 500px;
             overflow-y: auto;
-            border-radius: 0.5rem;
-            padding: 1rem;
             white-space: pre-wrap;
             word-break: break-all;
         }
-        .log-success { color: #22c55e; }
-        .log-error { color: #ef4444; }
-        .log-info { color: #94a3b8; }
-        .compact-table { width: 100%; border-collapse: collapse; }
-        .compact-table th, .compact-table td { padding: 0.5rem; text-align: left; border-bottom: 1px solid #e5e7eb; }
-        .compact-table th { background: #f9fafb; font-weight: 600; font-size: 0.875rem; }
-        .compact-table tr:hover { background: #f9fafb; }
+
+        .log-container::-webkit-scrollbar { width: 8px; }
+        .log-container::-webkit-scrollbar-track { background: #1E293B; border-radius: 4px; }
+        .log-container::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+
+        .log-success { color: #4ADE80; }
+        .log-error { color: #F87171; }
+        .log-info { color: #94A3B8; }
+
+        /* SSE Status Indicator */
+        .sse-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .sse-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #94A3B8;
+        }
+
+        .sse-dot.connected { background: var(--success); animation: pulse 2s infinite; }
+        .sse-dot.disconnected { background: var(--danger); }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Quota Grid */
+        .card-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 16px;
+        }
+
+        .quota-card {
+            background: #F8FAFC;
+            border-radius: 12px;
+            padding: 16px;
+            border: 1px solid var(--border);
+            transition: all 0.2s ease;
+        }
+
+        .quota-card:hover {
+            border-color: var(--primary);
+            box-shadow: 0 2px 8px rgba(59,130,246,0.1);
+        }
+
+        .quota-card.warning { border-color: var(--warning); }
+        .quota-card.danger { border-color: var(--danger); }
+
+        .quota-bar {
+            height: 6px;
+            border-radius: 3px;
+            background: #E2E8F0;
+            overflow: hidden;
+        }
+
+        .quota-fill {
+            height: 100%;
+            transition: width 0.3s ease;
+            border-radius: 3px;
+        }
+
+        .quota-high { background: linear-gradient(90deg, #22C55E, #16A34A); }
+        .quota-medium { background: linear-gradient(90deg, #EAB308, #CA8A04); }
+        .quota-low { background: linear-gradient(90deg, #EF4444, #DC2626); }
+
+        /* Compact Table */
+        .compact-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .compact-table th {
+            background: #F8FAFC;
+            font-weight: 600;
+            font-size: 13px;
+            color: var(--text-secondary);
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .compact-table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+        }
+
+        .compact-table tr:hover { background: #F8FAFC; }
+
+        /* Layout Toggle */
+        .layout-toggle {
+            display: inline-flex;
+            background: #F1F5F9;
+            border-radius: 8px;
+            padding: 2px;
+            gap: 2px;
+        }
+
+        .layout-btn {
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: var(--text-secondary);
+            background: transparent;
+        }
+
+        .layout-btn.active {
+            background: white;
+            color: var(--primary);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        /* History Preview */
+        .history-preview {
+            max-height: 200px;
+            overflow-y: auto;
+            background: #F8FAFC;
+            border-radius: 10px;
+            padding: 12px;
+        }
+
+        .history-item {
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        .history-item:last-child { border-bottom: none; }
     </style>
 </head>
-<body class="bg-gray-100 min-h-screen">
+<body class="min-h-screen">
     <div class="container mx-auto px-4 py-8 max-w-7xl">
-        <h1 class="text-3xl font-bold text-gray-800 mb-6">gcli2api-helper</h1>
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-8">
+            <h1 class="text-2xl font-bold text-slate-800">gcli2api-helper</h1>
+            <div class="sse-status" id="sse-status">
+                <span class="sse-dot" id="sse-dot"></span>
+                <span id="sse-text">未连接</span>
+            </div>
+        </div>
 
         <!-- Tabs -->
-        <div class="flex border-b-2 border-gray-200 mb-0">
-            <button class="tab-btn active" onclick="switchTab('monitor')" id="tab-monitor">监控</button>
-            <button class="tab-btn" onclick="switchTab('logs')" id="tab-logs">日志</button>
+        <div class="mb-6">
+            <div class="tab-container">
+                <button class="tab-btn active" onclick="switchTab('monitor')" id="tab-monitor">📊 监控</button>
+                <button class="tab-btn" onclick="switchTab('logs')" id="tab-logs">📋 日志</button>
+            </div>
         </div>
 
         <!-- Monitor Tab -->
-        <div id="panel-monitor" class="tab-panel">
+        <div id="panel-monitor" class="tab-panel space-y-6">
             <!-- Connection Section -->
-            <div class="bg-white rounded-t-none rounded-lg shadow p-6 mb-6">
-                <h2 class="text-xl font-semibold mb-4">连接配置</h2>
+            <div class="card">
+                <h2 class="card-header">🔗 连接配置</h2>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">gcli2api 地址</label>
-                        <input type="text" id="gcli-url" class="w-full border rounded px-3 py-2" placeholder="http://127.0.0.1:7861">
+                        <label class="block text-sm font-medium text-slate-600 mb-2">gcli2api 地址</label>
+                        <input type="text" id="gcli-url" placeholder="http://127.0.0.1:7861">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">密码</label>
-                        <input type="password" id="gcli-password" class="w-full border rounded px-3 py-2" placeholder="密码">
+                        <label class="block text-sm font-medium text-slate-600 mb-2">密码</label>
+                        <input type="password" id="gcli-password" placeholder="••••••">
                     </div>
-                    <div class="flex items-end">
-                        <button onclick="connect()" class="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600">连接</button>
-                        <span id="connection-status" class="ml-4 text-sm"></span>
+                    <div class="flex items-end gap-3">
+                        <button onclick="connect()" class="btn btn-primary">连接</button>
+                        <span id="connection-status" class="text-sm"></span>
                     </div>
                 </div>
             </div>
 
             <!-- Auto Verify Section -->
-            <div class="bg-white rounded-lg shadow p-6 mb-6">
-                <h2 class="text-xl font-semibold mb-4">自动检验恢复</h2>
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                    <div class="flex items-center">
-                        <input type="checkbox" id="auto-verify-enabled" class="mr-2 h-5 w-5">
-                        <label class="text-sm font-medium text-gray-700">启用自动检验</label>
+            <div class="card">
+                <h2 class="card-header">⚡ 自动检验恢复</h2>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
+                    <div class="flex items-center gap-3">
+                        <input type="checkbox" id="auto-verify-enabled">
+                        <label class="text-sm font-medium text-slate-700">启用自动检验</label>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">检查间隔(秒)</label>
-                        <input type="number" id="auto-verify-interval" class="w-full border rounded px-3 py-2" min="60" value="300">
+                        <label class="block text-sm font-medium text-slate-600 mb-2">检查间隔(秒)</label>
+                        <input type="number" id="auto-verify-interval" min="60" value="300">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">错误码(逗号分隔)</label>
-                        <input type="text" id="auto-verify-codes" class="w-full border rounded px-3 py-2" value="403">
+                        <label class="block text-sm font-medium text-slate-600 mb-2">错误码(逗号分隔)</label>
+                        <input type="text" id="auto-verify-codes" value="403">
                     </div>
                     <div class="flex items-end gap-2">
-                        <button onclick="saveConfig()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">保存</button>
-                        <button onclick="triggerVerify()" class="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600">立即检验</button>
+                        <button onclick="saveConfig()" class="btn btn-success btn-sm">保存</button>
+                        <button onclick="triggerVerify()" class="btn btn-warning btn-sm">立即检验</button>
                     </div>
                 </div>
-                <div id="verify-status" class="text-sm text-gray-600 mb-4"></div>
-                <div id="verify-history" class="max-h-48 overflow-y-auto text-sm bg-gray-50 rounded p-3"></div>
+                <div id="verify-status" class="text-sm text-slate-600 mb-4"></div>
+                <div id="verify-history" class="history-preview"></div>
             </div>
 
             <!-- Quota Monitor Section -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
-                    <h2 class="text-xl font-semibold">凭证额度监控</h2>
-                    <div class="flex flex-wrap gap-2 items-center">
-                        <select id="quota-filter" onchange="applyFilter()" class="border rounded px-2 py-1 text-sm">
+            <div class="card">
+                <div class="flex flex-wrap justify-between items-center mb-5 gap-3">
+                    <h2 class="card-header mb-0">📈 凭证额度监控</h2>
+                    <div class="flex flex-wrap gap-3 items-center">
+                        <select id="quota-filter" onchange="applyFilter()" class="w-auto">
                             <option value="all">全部凭证</option>
                         </select>
-                        <select id="quota-sort" onchange="applySort()" class="border rounded px-2 py-1 text-sm">
+                        <select id="quota-sort" onchange="applySort()" class="w-auto">
                             <option value="name">按名称</option>
                             <option value="quota-asc">额度升序</option>
                             <option value="quota-desc">额度降序</option>
                             <option value="low-first">低额度优先</option>
                         </select>
-                        <!-- Layout Toggle -->
-                        <div class="flex border rounded overflow-hidden">
-                            <button onclick="setLayout('detail')" id="layout-detail" class="px-3 py-1 text-sm bg-blue-500 text-white">详细</button>
-                            <button onclick="setLayout('compact')" id="layout-compact" class="px-3 py-1 text-sm bg-gray-200 text-gray-700">简洁</button>
+                        <div class="layout-toggle">
+                            <button onclick="setLayout('detail')" id="layout-detail" class="layout-btn active">详细</button>
+                            <button onclick="setLayout('compact')" id="layout-compact" class="layout-btn">简洁</button>
                         </div>
-                        <span id="quota-cache-info" class="text-sm text-gray-500"></span>
-                        <button onclick="refreshQuota()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-sm">刷新</button>
+                        <span id="quota-cache-info" class="text-xs text-slate-500"></span>
+                        <button onclick="refreshQuota()" class="btn btn-primary btn-sm">刷新</button>
                     </div>
                 </div>
                 <div id="quota-cards" class="card-grid"></div>
@@ -123,27 +431,28 @@
 
         <!-- Logs Tab -->
         <div id="panel-logs" class="tab-panel hidden">
-            <div class="bg-white rounded-t-none rounded-lg shadow p-6">
-                <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
-                    <h2 class="text-xl font-semibold">检验日志</h2>
-                    <div class="flex flex-wrap gap-2 items-center">
-                        <select id="log-filter" onchange="filterLogs()" class="border rounded px-2 py-1 text-sm">
+            <div class="card">
+                <div class="flex flex-wrap justify-between items-center mb-5 gap-3">
+                    <h2 class="card-header mb-0">📋 检验日志</h2>
+                    <div class="flex flex-wrap gap-3 items-center">
+                        <select id="log-filter" onchange="filterLogs()" class="w-auto">
                             <option value="all">全部</option>
                             <option value="success">成功</option>
                             <option value="failed">失败</option>
                         </select>
-                        <label class="flex items-center text-sm">
-                            <input type="checkbox" id="log-auto-scroll" checked class="mr-1">
+                        <label class="flex items-center gap-2 text-sm text-slate-600">
+                            <input type="checkbox" id="log-auto-scroll" checked>
                             自动滚动
                         </label>
-                        <button onclick="downloadLogs()" class="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 text-sm">下载日志</button>
-                        <button onclick="clearLogs()" class="bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 text-sm">清空</button>
-                        <button onclick="refreshLogs()" class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm">刷新</button>
+                        <button onclick="downloadLogs()" class="btn btn-success btn-sm">下载</button>
+                        <button onclick="clearLogs()" class="btn btn-secondary btn-sm">清空</button>
+                        <button onclick="refreshLogs()" class="btn btn-primary btn-sm">刷新</button>
                     </div>
                 </div>
                 <div id="log-container" class="log-container"></div>
-                <div class="mt-2 text-sm text-gray-500">
-                    <span id="log-count">0</span> 条日志记录
+                <div class="mt-3 flex items-center justify-between text-sm text-slate-500">
+                    <span><span id="log-count">0</span> 条日志记录</span>
+                    <span id="log-sse-status" class="text-xs"></span>
                 </div>
             </div>
         </div>
@@ -154,6 +463,7 @@
         let currentLayout = 'detail';
         let allLogs = [];
         let filteredLogs = [];
+        let eventSource = null;
 
         async function api(path, options = {}) {
             const resp = await fetch(API_BASE + path, {
@@ -163,26 +473,79 @@
             return resp.json();
         }
 
+        // SSE Connection
+        function connectSSE() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            updateSSEStatus('connecting');
+
+            eventSource = new EventSource('/api/verify/logs/stream');
+
+            eventSource.addEventListener('init', (e) => {
+                allLogs = JSON.parse(e.data);
+                filterLogs();
+                updateSSEStatus('connected');
+            });
+
+            eventSource.addEventListener('log', (e) => {
+                const log = JSON.parse(e.data);
+                allLogs.unshift(log);
+                if (allLogs.length > 100) allLogs.pop();
+                filterLogs();
+                loadVerifyHistory();
+            });
+
+            eventSource.addEventListener('heartbeat', () => {
+                // Keep alive
+            });
+
+            eventSource.onerror = () => {
+                updateSSEStatus('disconnected');
+                setTimeout(connectSSE, 3000);
+            };
+
+            eventSource.onopen = () => {
+                updateSSEStatus('connected');
+            };
+        }
+
+        function updateSSEStatus(status) {
+            const dot = document.getElementById('sse-dot');
+            const text = document.getElementById('sse-text');
+            const logStatus = document.getElementById('log-sse-status');
+
+            dot.className = 'sse-dot';
+            if (status === 'connected') {
+                dot.classList.add('connected');
+                text.textContent = '实时连接';
+                if (logStatus) logStatus.textContent = '🟢 实时更新中';
+            } else if (status === 'connecting') {
+                text.textContent = '连接中...';
+                if (logStatus) logStatus.textContent = '🟡 正在连接...';
+            } else {
+                dot.classList.add('disconnected');
+                text.textContent = '已断开';
+                if (logStatus) logStatus.textContent = '🔴 连接已断开，正在重连...';
+            }
+        }
+
         // Tab switching
         function switchTab(tab) {
             document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.add('hidden'));
             document.getElementById('tab-' + tab).classList.add('active');
             document.getElementById('panel-' + tab).classList.remove('hidden');
-            if (tab === 'logs') {
-                refreshLogs();
-            }
         }
 
         // Layout switching
         function setLayout(layout) {
             currentLayout = layout;
             document.getElementById('layout-detail').className = layout === 'detail'
-                ? 'px-3 py-1 text-sm bg-blue-500 text-white'
-                : 'px-3 py-1 text-sm bg-gray-200 text-gray-700';
+                ? 'layout-btn active' : 'layout-btn';
             document.getElementById('layout-compact').className = layout === 'compact'
-                ? 'px-3 py-1 text-sm bg-blue-500 text-white'
-                : 'px-3 py-1 text-sm bg-gray-200 text-gray-700';
+                ? 'layout-btn active' : 'layout-btn';
             renderQuota(quotaData);
         }
 
@@ -202,9 +565,9 @@
         function updateConnectionStatus(connected) {
             const el = document.getElementById('connection-status');
             if (connected) {
-                el.innerHTML = '<span class="text-green-600">✓ 已连接</span>';
+                el.innerHTML = '<span class="badge badge-success">✓ 已连接</span>';
             } else {
-                el.innerHTML = '<span class="text-red-600">✗ 未连接</span>';
+                el.innerHTML = '<span class="badge badge-danger">✗ 未连接</span>';
             }
         }
 
@@ -248,8 +611,10 @@
             const data = await api('/api/verify/status');
             if (data.success) {
                 const el = document.getElementById('verify-status');
-                const status = data.running ? '运行中' : '已停止';
-                el.innerHTML = `状态: <span class="${data.running ? 'text-green-600' : 'text-gray-500'}">${status}</span> | 间隔: ${data.interval}秒 | 错误码: ${data.error_codes.join(', ')}`;
+                const statusBadge = data.running
+                    ? '<span class="badge badge-success">运行中</span>'
+                    : '<span class="badge badge-danger">已停止</span>';
+                el.innerHTML = `状态: ${statusBadge} <span class="ml-3 text-slate-500">间隔: ${data.interval}秒 | 错误码: ${data.error_codes.join(', ')}</span>`;
             }
             loadVerifyHistory();
         }
@@ -259,13 +624,13 @@
             if (data.success) {
                 const el = document.getElementById('verify-history');
                 if (data.history.length === 0) {
-                    el.innerHTML = '<span class="text-gray-400">暂无检验记录</span>';
+                    el.innerHTML = '<span class="text-slate-400">暂无检验记录</span>';
                 } else {
                     el.innerHTML = data.history.slice(0, 20).map(h => {
                         const time = new Date(h.timestamp).toLocaleString();
                         const icon = h.success ? '✓' : '✗';
                         const color = h.success ? 'text-green-600' : 'text-red-600';
-                        return `<div class="py-1 border-b border-gray-200"><span class="${color}">${icon}</span> [${time}] ${h.filename || ''} - ${h.message || ''}</div>`;
+                        return `<div class="history-item"><span class="${color} font-medium">${icon}</span> <span class="text-slate-500">[${time}]</span> ${h.filename || ''} <span class="text-slate-400">- ${h.message || ''}</span></div>`;
                     }).join('');
                 }
             }
@@ -276,7 +641,6 @@
             if (data.success) {
                 alert(`检验完成: ${data.verified}/${data.total} 个凭证`);
                 loadVerifyHistory();
-                refreshLogs();
             } else {
                 alert('检验失败: ' + (data.detail || data.message));
             }
@@ -410,13 +774,8 @@
             return quotas.length > 0 ? quotas.reduce((a, b) => a + b, 0) / quotas.length : 1;
         }
 
-        function applyFilter() {
-            renderQuota(quotaData);
-        }
-
-        function applySort() {
-            renderQuota(quotaData);
-        }
+        function applyFilter() { renderQuota(quotaData); }
+        function applySort() { renderQuota(quotaData); }
 
         function renderQuota(data) {
             const cacheInfo = document.getElementById('quota-cache-info');
@@ -427,18 +786,16 @@
 
             const container = document.getElementById('quota-cards');
             if (!data || !data.success || !data.data || data.data.length === 0) {
-                container.innerHTML = '<div class="text-gray-400">暂无凭证数据，请先连接并刷新</div>';
+                container.innerHTML = '<div class="text-slate-400 py-8 text-center">暂无凭证数据，请先连接并刷新</div>';
                 return;
             }
 
-            // Apply filter
             const filterValue = document.getElementById('quota-filter').value;
             let filteredData = data.data;
             if (filterValue !== 'all') {
                 filteredData = data.data.filter(c => c.filename === filterValue);
             }
 
-            // Apply sort
             const sortValue = document.getElementById('quota-sort').value;
             const sortedData = [...filteredData];
             if (sortValue === 'quota-asc') {
@@ -484,11 +841,11 @@
 
                             let statusBadge = '';
                             if (cred.disabled) {
-                                statusBadge = '<span class="bg-red-100 text-red-600 text-xs px-2 py-1 rounded">禁用</span>';
+                                statusBadge = '<span class="badge badge-danger">禁用</span>';
                             } else if (minQuota < 0.2) {
-                                statusBadge = '<span class="bg-orange-100 text-orange-600 text-xs px-2 py-1 rounded">⚠️ 低额度</span>';
+                                statusBadge = '<span class="badge badge-warning">⚠️ 低额度</span>';
                             } else {
-                                statusBadge = '<span class="bg-green-100 text-green-600 text-xs px-2 py-1 rounded">正常</span>';
+                                statusBadge = '<span class="badge badge-success">正常</span>';
                             }
 
                             const minColor = minPct > 50 ? 'text-green-600' : minPct > 20 ? 'text-yellow-600' : 'text-red-600';
@@ -496,11 +853,11 @@
 
                             return `
                                 <tr>
-                                    <td class="font-medium text-sm">${cred.filename}</td>
-                                    <td class="text-sm text-gray-500">${cred.user_email || '-'}</td>
+                                    <td class="font-medium">${cred.filename}</td>
+                                    <td class="text-slate-500">${cred.user_email || '-'}</td>
                                     <td>${statusBadge}</td>
-                                    <td class="${avgColor} font-medium">${avgPct}%</td>
-                                    <td class="${minColor} font-medium">${minPct}%</td>
+                                    <td class="${avgColor} font-semibold">${avgPct}%</td>
+                                    <td class="${minColor} font-semibold">${minPct}%</td>
                                 </tr>
                             `;
                         }).join('')}
@@ -515,43 +872,41 @@
                 const quota = cred.quota || {};
                 const models = quota.models || {};
                 const minQuota = getMinQuota(cred);
-                const cardClass = minQuota < 0.2 ? 'card-danger' : minQuota < 0.5 ? 'card-warning' : '';
+                const cardClass = minQuota < 0.2 ? 'danger' : minQuota < 0.5 ? 'warning' : '';
 
                 const modelList = Object.entries(models).map(([name, info]) => {
-                    const pct = info.remaining !== undefined
-                        ? Math.round(info.remaining * 100)
-                        : 100;
+                    const pct = info.remaining !== undefined ? Math.round(info.remaining * 100) : 100;
                     const colorClass = pct > 50 ? 'quota-high' : pct > 20 ? 'quota-medium' : 'quota-low';
                     const resetTime = info.resetTime || '';
                     return `
-                        <div class="mb-2">
+                        <div class="mb-3">
                             <div class="flex justify-between text-xs mb-1">
-                                <span class="truncate flex-1" title="${name}">${name}</span>
-                                <span class="${pct > 50 ? 'text-green-600' : pct > 20 ? 'text-yellow-600' : 'text-red-600'} font-medium ml-2">${pct}%</span>
+                                <span class="truncate flex-1 text-slate-600" title="${name}">${name}</span>
+                                <span class="${pct > 50 ? 'text-green-600' : pct > 20 ? 'text-yellow-600' : 'text-red-600'} font-semibold ml-2">${pct}%</span>
                             </div>
                             <div class="quota-bar"><div class="quota-fill ${colorClass}" style="width: ${pct}%"></div></div>
-                            ${resetTime ? `<div class="text-xs text-gray-400 mt-1">🔄 ${resetTime}</div>` : ''}
+                            ${resetTime ? `<div class="text-xs text-slate-400 mt-1">🔄 ${resetTime}</div>` : ''}
                         </div>
                     `;
                 }).join('');
 
                 const statusBadge = cred.disabled
-                    ? '<span class="bg-red-100 text-red-600 text-xs px-2 py-1 rounded">禁用</span>'
+                    ? '<span class="badge badge-danger">禁用</span>'
                     : minQuota < 0.2
-                        ? '<span class="bg-orange-100 text-orange-600 text-xs px-2 py-1 rounded">⚠️ 低额度</span>'
-                        : '<span class="bg-green-100 text-green-600 text-xs px-2 py-1 rounded">正常</span>';
+                        ? '<span class="badge badge-warning">⚠️ 低额度</span>'
+                        : '<span class="badge badge-success">正常</span>';
 
                 return `
-                    <div class="bg-gray-50 rounded-lg p-4 border ${cardClass}">
-                        <div class="flex justify-between items-start mb-3">
+                    <div class="quota-card ${cardClass}">
+                        <div class="flex justify-between items-start mb-4">
                             <div class="truncate flex-1 mr-2">
-                                <div class="font-medium text-sm truncate" title="${cred.filename}">${cred.filename}</div>
-                                <div class="text-xs text-gray-500 truncate">${cred.user_email || ''}</div>
+                                <div class="font-semibold text-sm text-slate-800 truncate" title="${cred.filename}">${cred.filename}</div>
+                                <div class="text-xs text-slate-500 truncate mt-1">${cred.user_email || ''}</div>
                             </div>
                             ${statusBadge}
                         </div>
                         <div class="space-y-1">
-                            ${modelList || '<div class="text-xs text-gray-400">无额度信息</div>'}
+                            ${modelList || '<div class="text-xs text-slate-400">无额度信息</div>'}
                         </div>
                     </div>
                 `;
@@ -559,8 +914,11 @@
         }
 
         // Initial load
-        loadConfig();
-        setInterval(loadVerifyStatus, 30000);
+        document.addEventListener('DOMContentLoaded', () => {
+            loadConfig();
+            connectSSE();
+            setInterval(loadVerifyStatus, 30000);
+        });
     </script>
 </body>
 </html>

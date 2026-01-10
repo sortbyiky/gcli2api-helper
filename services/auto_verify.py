@@ -15,6 +15,11 @@ class AutoVerifyService:
         self._client: Optional[GcliApiClient] = None
         self._history: List[Dict[str, Any]] = []
         self._max_history = 100
+        self._on_new_log = None  # SSE callback
+
+    def set_log_callback(self, callback):
+        """Set callback for new log entries (for SSE)"""
+        self._on_new_log = callback
 
     @property
     def is_running(self) -> bool:
@@ -146,6 +151,9 @@ class AutoVerifyService:
         self._history.insert(0, entry)
         if len(self._history) > self._max_history:
             self._history = self._history[:self._max_history]
+        # Trigger SSE callback
+        if self._on_new_log:
+            asyncio.create_task(self._on_new_log(entry))
 
     def get_status(self) -> Dict[str, Any]:
         return {

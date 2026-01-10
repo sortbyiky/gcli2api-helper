@@ -1,13 +1,16 @@
+import asyncio
+import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
 
 from config import config
 from services.api_client import GcliApiClient
@@ -18,6 +21,22 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 api_client: Optional[GcliApiClient] = None
+
+# SSE clients management
+sse_clients: List[asyncio.Queue] = []
+
+
+async def broadcast_log(log_entry: dict):
+    """Broadcast new log to all SSE clients"""
+    for queue in sse_clients:
+        try:
+            await queue.put(log_entry)
+        except Exception:
+            pass
+
+
+# Set SSE callback for auto_verify_service
+auto_verify_service.set_log_callback(broadcast_log)
 
 
 @asynccontextmanager
@@ -159,6 +178,38 @@ async def api_verify_history():
         "success": True,
         "history": auto_verify_service.history,
     }
+
+
+@app.get("/api/verify/logs/stream")
+async def api_logs_stream(request: Request):
+    """SSE endpoint for real-time log streaming"""
+    queue = asyncio.Queue()
+    sse_clients.append(queue)
+
+    async def event_generator():
+        try:
+            # Send initial history on connect
+            yield {
+                "event": "init",
+                "data": json.dumps(auto_verify_service.history)
+            }
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    data = await asyncio.wait_for(queue.get(), timeout=30)
+                    yield {
+                        "event": "log",
+                        "data": json.dumps(data)
+                    }
+                except asyncio.TimeoutError:
+                    # Send heartbeat to keep connection alive
+                    yield {"event": "heartbeat", "data": ""}
+        finally:
+            if queue in sse_clients:
+                sse_clients.remove(queue)
+
+    return EventSourceResponse(event_generator())
 
 
 @app.post("/api/verify/trigger")
