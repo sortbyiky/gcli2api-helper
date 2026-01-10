@@ -55,19 +55,25 @@ class AutoVerifyService:
     async def _run_loop(self, interval: int, error_codes: List[int]):
         while self._running:
             try:
+                await self._add_history({
+                    "type": "info",
+                    "message": f"开始定时检验，检查错误码: {error_codes}"
+                })
                 await self._check_and_verify(error_codes)
             except Exception as e:
                 logger.error(f"Auto verify error: {e}")
-                self._add_history({"type": "error", "message": str(e)})
+                await self._add_history({"type": "error", "message": str(e)})
             await asyncio.sleep(interval)
 
     async def _check_and_verify(self, error_codes: List[int]):
         if not self._client:
+            await self._add_history({"type": "warning", "message": "未连接到 gcli2api"})
             return
 
         # Get disabled credentials
         disabled = await self._client.get_disabled_credentials()
         if not disabled:
+            await self._add_history({"type": "info", "message": "检验完成，没有发现禁用的凭证"})
             return
 
         # Filter by error codes
@@ -78,6 +84,10 @@ class AutoVerifyService:
                 to_verify.append(cred)
 
         if not to_verify:
+            await self._add_history({
+                "type": "info",
+                "message": f"检验完成，{len(disabled)} 个禁用凭证，但无匹配错误码 {error_codes}"
+            })
             return
 
         logger.info(f"Found {len(to_verify)} credentials to verify")
@@ -90,7 +100,7 @@ class AutoVerifyService:
             try:
                 result = await self._client.verify_credential(filename)
                 success = result.get("success", False)
-                self._add_history({
+                await self._add_history({
                     "type": "verify",
                     "filename": filename,
                     "success": success,
@@ -98,7 +108,7 @@ class AutoVerifyService:
                 })
                 logger.info(f"Verified {filename}: success={success}")
             except Exception as e:
-                self._add_history({
+                await self._add_history({
                     "type": "verify",
                     "filename": filename,
                     "success": False,
@@ -126,7 +136,7 @@ class AutoVerifyService:
                     "success": result.get("success", False),
                     "message": result.get("message", ""),
                 })
-                self._add_history({
+                await self._add_history({
                     "type": "verify",
                     "filename": filename,
                     "success": result.get("success", False),
@@ -146,14 +156,14 @@ class AutoVerifyService:
             "results": results,
         }
 
-    def _add_history(self, entry: Dict[str, Any]):
+    async def _add_history(self, entry: Dict[str, Any]):
         entry["timestamp"] = datetime.now().isoformat()
         self._history.insert(0, entry)
         if len(self._history) > self._max_history:
             self._history = self._history[:self._max_history]
         # Trigger SSE callback
         if self._on_new_log:
-            asyncio.create_task(self._on_new_log(entry))
+            await self._on_new_log(entry)
 
     def get_status(self) -> Dict[str, Any]:
         return {

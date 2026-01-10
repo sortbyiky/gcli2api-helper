@@ -204,6 +204,7 @@
         .log-success { color: #4ADE80; }
         .log-error { color: #F87171; }
         .log-info { color: #94A3B8; }
+        .log-warning { color: #FBBF24; }
 
         /* SSE Status Indicator */
         .sse-status {
@@ -686,6 +687,12 @@
                 if (type === 'error') {
                     statusClass = 'log-error';
                     statusText = 'ERROR';
+                } else if (type === 'warning') {
+                    statusClass = 'log-warning';
+                    statusText = 'WARNING';
+                } else if (type === 'info') {
+                    statusClass = 'log-info';
+                    statusText = 'INFO';
                 } else if (log.success === true) {
                     statusClass = 'log-success';
                     statusText = 'SUCCESS';
