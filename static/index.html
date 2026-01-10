@@ -12,6 +12,8 @@
         .quota-high { background: #22c55e; }
         .quota-medium { background: #eab308; }
         .quota-low { background: #ef4444; }
+        .card-warning { border-color: #f59e0b !important; box-shadow: 0 0 0 1px #f59e0b; }
+        .card-danger { border-color: #ef4444 !important; box-shadow: 0 0 0 1px #ef4444; }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
@@ -51,7 +53,7 @@
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">错误码(逗号分隔)</label>
-                    <input type="text" id="auto-verify-codes" class="w-full border rounded px-3 py-2" value="400,403">
+                    <input type="text" id="auto-verify-codes" class="w-full border rounded px-3 py-2" value="403">
                 </div>
                 <div class="flex items-end gap-2">
                     <button onclick="saveConfig()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">保存</button>
@@ -64,9 +66,18 @@
 
         <!-- Quota Monitor Section -->
         <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex justify-between items-center mb-4">
+            <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
                 <h2 class="text-xl font-semibold">凭证额度监控</h2>
-                <div class="flex gap-2">
+                <div class="flex flex-wrap gap-2 items-center">
+                    <select id="quota-filter" onchange="applyFilter()" class="border rounded px-2 py-1 text-sm">
+                        <option value="all">全部凭证</option>
+                    </select>
+                    <select id="quota-sort" onchange="applySort()" class="border rounded px-2 py-1 text-sm">
+                        <option value="name">按名称</option>
+                        <option value="quota-asc">额度升序</option>
+                        <option value="quota-desc">额度降序</option>
+                        <option value="low-first">低额度优先</option>
+                    </select>
                     <span id="quota-cache-info" class="text-sm text-gray-500"></span>
                     <button onclick="refreshQuota()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-sm">刷新</button>
                 </div>
@@ -181,21 +192,50 @@
             }
         }
 
+        let quotaData = null; // Store quota data for filtering/sorting
+
         async function loadQuota() {
             const data = await api('/api/quota');
+            quotaData = data;
+            updateFilterOptions();
             renderQuota(data);
         }
 
         async function refreshQuota() {
             const data = await api('/api/quota/refresh', { method: 'POST' });
+            quotaData = data;
+            updateFilterOptions();
             renderQuota(data);
+        }
+
+        function updateFilterOptions() {
+            if (!quotaData || !quotaData.data) return;
+            const filter = document.getElementById('quota-filter');
+            const currentValue = filter.value;
+            filter.innerHTML = '<option value="all">全部凭证</option>' +
+                quotaData.data.map(c => `<option value="${c.filename}">${c.filename.replace('.json', '')}</option>`).join('');
+            filter.value = currentValue;
+        }
+
+        function getMinQuota(cred) {
+            const models = cred.quota?.models || {};
+            const quotas = Object.values(models).map(m => m.remaining !== undefined ? m.remaining : 1);
+            return quotas.length > 0 ? Math.min(...quotas) : 1;
+        }
+
+        function applyFilter() {
+            renderQuota(quotaData);
+        }
+
+        function applySort() {
+            renderQuota(quotaData);
         }
 
         function renderQuota(data) {
             const cacheInfo = document.getElementById('quota-cache-info');
             if (data.cache_time) {
                 const time = new Date(data.cache_time).toLocaleString();
-                cacheInfo.textContent = `缓存时间: ${time}${data.cached ? ' (缓存)' : ' (已刷新)'}`;
+                cacheInfo.textContent = `缓存: ${time}${data.cached ? '' : ' (已刷新)'}`;
             }
 
             const container = document.getElementById('quota-cards');
@@ -204,31 +244,63 @@
                 return;
             }
 
-            container.innerHTML = data.data.map(cred => {
+            // Apply filter
+            const filterValue = document.getElementById('quota-filter').value;
+            let filteredData = data.data;
+            if (filterValue !== 'all') {
+                filteredData = data.data.filter(c => c.filename === filterValue);
+            }
+
+            // Apply sort
+            const sortValue = document.getElementById('quota-sort').value;
+            const sortedData = [...filteredData];
+            if (sortValue === 'quota-asc') {
+                sortedData.sort((a, b) => getMinQuota(a) - getMinQuota(b));
+            } else if (sortValue === 'quota-desc') {
+                sortedData.sort((a, b) => getMinQuota(b) - getMinQuota(a));
+            } else if (sortValue === 'low-first') {
+                sortedData.sort((a, b) => {
+                    const aLow = getMinQuota(a) < 0.2 ? 0 : 1;
+                    const bLow = getMinQuota(b) < 0.2 ? 0 : 1;
+                    return aLow - bLow || getMinQuota(a) - getMinQuota(b);
+                });
+            } else {
+                sortedData.sort((a, b) => a.filename.localeCompare(b.filename));
+            }
+
+            container.innerHTML = sortedData.map(cred => {
                 const quota = cred.quota || {};
                 const models = quota.models || {};
+                const minQuota = getMinQuota(cred);
+                const cardClass = minQuota < 0.2 ? 'card-danger' : minQuota < 0.5 ? 'card-warning' : '';
+
                 const modelList = Object.entries(models).map(([name, info]) => {
-                    const pct = info.remaining !== undefined && info.quota !== undefined
-                        ? Math.round((info.remaining / info.quota) * 100)
-                        : (info.percentage !== undefined ? info.percentage : 100);
+                    // remaining is already a 0-1 fraction from the API
+                    const pct = info.remaining !== undefined
+                        ? Math.round(info.remaining * 100)
+                        : 100;
                     const colorClass = pct > 50 ? 'quota-high' : pct > 20 ? 'quota-medium' : 'quota-low';
+                    const resetTime = info.resetTime || '';
                     return `
                         <div class="mb-2">
                             <div class="flex justify-between text-xs mb-1">
-                                <span class="truncate" title="${name}">${name}</span>
-                                <span class="${pct > 50 ? 'text-green-600' : pct > 20 ? 'text-yellow-600' : 'text-red-600'}">${pct}%</span>
+                                <span class="truncate flex-1" title="${name}">${name}</span>
+                                <span class="${pct > 50 ? 'text-green-600' : pct > 20 ? 'text-yellow-600' : 'text-red-600'} font-medium ml-2">${pct}%</span>
                             </div>
                             <div class="quota-bar"><div class="quota-fill ${colorClass}" style="width: ${pct}%"></div></div>
+                            ${resetTime ? `<div class="text-xs text-gray-400 mt-1">🔄 ${resetTime}</div>` : ''}
                         </div>
                     `;
                 }).join('');
 
                 const statusBadge = cred.disabled
                     ? '<span class="bg-red-100 text-red-600 text-xs px-2 py-1 rounded">禁用</span>'
-                    : '<span class="bg-green-100 text-green-600 text-xs px-2 py-1 rounded">正常</span>';
+                    : minQuota < 0.2
+                        ? '<span class="bg-orange-100 text-orange-600 text-xs px-2 py-1 rounded">⚠️ 低额度</span>'
+                        : '<span class="bg-green-100 text-green-600 text-xs px-2 py-1 rounded">正常</span>';
 
                 return `
-                    <div class="bg-gray-50 rounded-lg p-4 border">
+                    <div class="bg-gray-50 rounded-lg p-4 border ${cardClass}">
                         <div class="flex justify-between items-start mb-3">
                             <div class="truncate flex-1 mr-2">
                                 <div class="font-medium text-sm truncate" title="${cred.filename}">${cred.filename}</div>

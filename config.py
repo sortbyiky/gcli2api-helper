@@ -11,7 +11,7 @@ class Config:
         self.gcli_password: str = ""
         self.auto_verify_enabled: bool = False
         self.auto_verify_interval: int = 300  # seconds
-        self.auto_verify_error_codes: List[int] = [400, 403]
+        self.auto_verify_error_codes: List[int] = [403]  # Only 403 (permission issues), not 400 (client errors)
         self.quota_refresh_interval: int = 300  # 5 minutes
         self._token: Optional[str] = None
         self.load()
