@@ -308,7 +308,7 @@ async def api_version(check_update: bool = False):
 
     if check_update:
         try:
-            github_url = "https://raw.githubusercontent.com/sortbyiky/gcli2api-helper/refs/heads/master/version.txt"
+            github_url = "https://raw.githubusercontent.com/sortbyiky/gcli2api-helper/main/version.txt"
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(github_url)
                 if resp.status_code == 200:
