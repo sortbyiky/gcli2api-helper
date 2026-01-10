@@ -16,24 +16,62 @@ gcli2api 的辅助工具，提供自动检验恢复和凭证额度监控功能�
 
 ## 快速开始
 
-### 方式一：Python 直接运行
+### 方式一：Docker 拉取镜像（推荐）
 
 ```bash
-# 安装依赖
-pip install -r requirements.txt
+# 拉取最新镜像
+docker pull ghcr.io/sortbyiky/gcli2api-helper:latest
 
-# 启动服务
-python main.py
+# 运行容器
+docker run -d \
+  --name gcli2api-helper \
+  -p 7862:7862 \
+  -v ./config.json:/app/config.json \
+  --restart unless-stopped \
+  ghcr.io/sortbyiky/gcli2api-helper:latest
 ```
 
-### 方式二：Docker 运行
+### 方式二：Docker Compose
+
+创建 `docker-compose.yml`：
+
+```yaml
+version: '3.8'
+
+services:
+  gcli2api-helper:
+    image: ghcr.io/sortbyiky/gcli2api-helper:latest
+    container_name: gcli2api-helper
+    ports:
+      - "7862:7862"
+    volumes:
+      - ./config.json:/app/config.json
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+```
+
+然后运行：
 
 ```bash
-# 构建并启动
 docker-compose up -d
+```
 
-# 查看日志
-docker-compose logs -f
+### 方式三：本地构建 Docker
+
+```bash
+git clone https://github.com/sortbyiky/gcli2api-helper.git
+cd gcli2api-helper
+docker-compose up -d --build
+```
+
+### 方式四：Python 直接运行
+
+```bash
+git clone https://github.com/sortbyiky/gcli2api-helper.git
+cd gcli2api-helper
+pip install -r requirements.txt
+python main.py
 ```
 
 ## 访问
@@ -63,8 +101,41 @@ docker-compose logs -f
 | /api/quota | GET | 获取凭证额度 |
 | /api/quota/refresh | POST | 刷新额度缓存 |
 
+## 与 gcli2api 配合使用
+
+如果你同时运行 gcli2api 和 gcli2api-helper，可以使用以下 docker-compose.yml：
+
+```yaml
+version: '3.8'
+
+services:
+  gcli2api:
+    image: ghcr.io/su-kaka/gcli2api:latest
+    container_name: gcli2api
+    ports:
+      - "7861:7861"
+    volumes:
+      - ./credentials:/app/credentials
+      - ./config.json:/app/config.json
+    restart: unless-stopped
+
+  gcli2api-helper:
+    image: ghcr.io/sortbyiky/gcli2api-helper:latest
+    container_name: gcli2api-helper
+    ports:
+      - "7862:7862"
+    volumes:
+      - ./helper-config.json:/app/config.json
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
+    depends_on:
+      - gcli2api
+```
+
 ## 注意事项
 
 - 本工具需要 gcli2api 服务正常运行
 - 额度查询仅支持 antigravity 模式的凭证
 - 建议检查间隔不低于 60 秒
+- Docker 镜像会在每次代码更新时自动构建
