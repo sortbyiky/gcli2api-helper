@@ -153,5 +153,29 @@ class AutoVerifyService:
             "history_count": len(self._history),
         }
 
+    def clear_history(self):
+        """Clear all history records"""
+        self._history = []
+
+    def export_history(self) -> str:
+        """Export history as text format"""
+        lines = []
+        for entry in self._history:
+            timestamp = entry.get("timestamp", "")
+            entry_type = entry.get("type", "unknown")
+            filename = entry.get("filename", "")
+            success = entry.get("success", False)
+            message = entry.get("message", "")
+
+            if entry_type == "verify":
+                status = "SUCCESS" if success else "FAILED"
+                lines.append(f"[{timestamp}] [{status}] {filename} - {message}")
+            elif entry_type == "error":
+                lines.append(f"[{timestamp}] [ERROR] {message}")
+            else:
+                lines.append(f"[{timestamp}] [{entry_type.upper()}] {message}")
+
+        return "\n".join(lines)
+
 
 auto_verify_service = AutoVerifyService()

@@ -14,80 +14,146 @@
         .quota-low { background: #ef4444; }
         .card-warning { border-color: #f59e0b !important; box-shadow: 0 0 0 1px #f59e0b; }
         .card-danger { border-color: #ef4444 !important; box-shadow: 0 0 0 1px #ef4444; }
+        .tab-btn { padding: 0.5rem 1.5rem; border-radius: 0.5rem 0.5rem 0 0; cursor: pointer; transition: all 0.2s; }
+        .tab-btn.active { background: white; border-bottom: 2px solid white; margin-bottom: -2px; }
+        .tab-btn:not(.active) { background: #e5e7eb; }
+        .log-container {
+            background-color: #1e1e1e;
+            color: #ffffff;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            height: 500px;
+            overflow-y: auto;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .log-success { color: #22c55e; }
+        .log-error { color: #ef4444; }
+        .log-info { color: #94a3b8; }
+        .compact-table { width: 100%; border-collapse: collapse; }
+        .compact-table th, .compact-table td { padding: 0.5rem; text-align: left; border-bottom: 1px solid #e5e7eb; }
+        .compact-table th { background: #f9fafb; font-weight: 600; font-size: 0.875rem; }
+        .compact-table tr:hover { background: #f9fafb; }
     </style>
 </head>
 <body class="bg-gray-100 min-h-screen">
     <div class="container mx-auto px-4 py-8 max-w-7xl">
-        <h1 class="text-3xl font-bold text-gray-800 mb-8">gcli2api-helper</h1>
+        <h1 class="text-3xl font-bold text-gray-800 mb-6">gcli2api-helper</h1>
 
-        <!-- Connection Section -->
-        <div class="bg-white rounded-lg shadow p-6 mb-6">
-            <h2 class="text-xl font-semibold mb-4">连接配置</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">gcli2api 地址</label>
-                    <input type="text" id="gcli-url" class="w-full border rounded px-3 py-2" placeholder="http://127.0.0.1:7861">
+        <!-- Tabs -->
+        <div class="flex border-b-2 border-gray-200 mb-0">
+            <button class="tab-btn active" onclick="switchTab('monitor')" id="tab-monitor">监控</button>
+            <button class="tab-btn" onclick="switchTab('logs')" id="tab-logs">日志</button>
+        </div>
+
+        <!-- Monitor Tab -->
+        <div id="panel-monitor" class="tab-panel">
+            <!-- Connection Section -->
+            <div class="bg-white rounded-t-none rounded-lg shadow p-6 mb-6">
+                <h2 class="text-xl font-semibold mb-4">连接配置</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">gcli2api 地址</label>
+                        <input type="text" id="gcli-url" class="w-full border rounded px-3 py-2" placeholder="http://127.0.0.1:7861">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                        <input type="password" id="gcli-password" class="w-full border rounded px-3 py-2" placeholder="密码">
+                    </div>
+                    <div class="flex items-end">
+                        <button onclick="connect()" class="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600">连接</button>
+                        <span id="connection-status" class="ml-4 text-sm"></span>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">密码</label>
-                    <input type="password" id="gcli-password" class="w-full border rounded px-3 py-2" placeholder="密码">
+            </div>
+
+            <!-- Auto Verify Section -->
+            <div class="bg-white rounded-lg shadow p-6 mb-6">
+                <h2 class="text-xl font-semibold mb-4">自动检验恢复</h2>
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                    <div class="flex items-center">
+                        <input type="checkbox" id="auto-verify-enabled" class="mr-2 h-5 w-5">
+                        <label class="text-sm font-medium text-gray-700">启用自动检验</label>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">检查间隔(秒)</label>
+                        <input type="number" id="auto-verify-interval" class="w-full border rounded px-3 py-2" min="60" value="300">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">错误码(逗号分隔)</label>
+                        <input type="text" id="auto-verify-codes" class="w-full border rounded px-3 py-2" value="403">
+                    </div>
+                    <div class="flex items-end gap-2">
+                        <button onclick="saveConfig()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">保存</button>
+                        <button onclick="triggerVerify()" class="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600">立即检验</button>
+                    </div>
                 </div>
-                <div class="flex items-end">
-                    <button onclick="connect()" class="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600">连接</button>
-                    <span id="connection-status" class="ml-4 text-sm"></span>
+                <div id="verify-status" class="text-sm text-gray-600 mb-4"></div>
+                <div id="verify-history" class="max-h-48 overflow-y-auto text-sm bg-gray-50 rounded p-3"></div>
+            </div>
+
+            <!-- Quota Monitor Section -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+                    <h2 class="text-xl font-semibold">凭证额度监控</h2>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <select id="quota-filter" onchange="applyFilter()" class="border rounded px-2 py-1 text-sm">
+                            <option value="all">全部凭证</option>
+                        </select>
+                        <select id="quota-sort" onchange="applySort()" class="border rounded px-2 py-1 text-sm">
+                            <option value="name">按名称</option>
+                            <option value="quota-asc">额度升序</option>
+                            <option value="quota-desc">额度降序</option>
+                            <option value="low-first">低额度优先</option>
+                        </select>
+                        <!-- Layout Toggle -->
+                        <div class="flex border rounded overflow-hidden">
+                            <button onclick="setLayout('detail')" id="layout-detail" class="px-3 py-1 text-sm bg-blue-500 text-white">详细</button>
+                            <button onclick="setLayout('compact')" id="layout-compact" class="px-3 py-1 text-sm bg-gray-200 text-gray-700">简洁</button>
+                        </div>
+                        <span id="quota-cache-info" class="text-sm text-gray-500"></span>
+                        <button onclick="refreshQuota()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-sm">刷新</button>
+                    </div>
                 </div>
+                <div id="quota-cards" class="card-grid"></div>
             </div>
         </div>
 
-        <!-- Auto Verify Section -->
-        <div class="bg-white rounded-lg shadow p-6 mb-6">
-            <h2 class="text-xl font-semibold mb-4">自动检验恢复</h2>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                <div class="flex items-center">
-                    <input type="checkbox" id="auto-verify-enabled" class="mr-2 h-5 w-5">
-                    <label class="text-sm font-medium text-gray-700">启用自动检验</label>
+        <!-- Logs Tab -->
+        <div id="panel-logs" class="tab-panel hidden">
+            <div class="bg-white rounded-t-none rounded-lg shadow p-6">
+                <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
+                    <h2 class="text-xl font-semibold">检验日志</h2>
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <select id="log-filter" onchange="filterLogs()" class="border rounded px-2 py-1 text-sm">
+                            <option value="all">全部</option>
+                            <option value="success">成功</option>
+                            <option value="failed">失败</option>
+                        </select>
+                        <label class="flex items-center text-sm">
+                            <input type="checkbox" id="log-auto-scroll" checked class="mr-1">
+                            自动滚动
+                        </label>
+                        <button onclick="downloadLogs()" class="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 text-sm">下载日志</button>
+                        <button onclick="clearLogs()" class="bg-gray-500 text-white px-3 py-1 rounded hover:bg-gray-600 text-sm">清空</button>
+                        <button onclick="refreshLogs()" class="bg-blue-500 text-white px-3 py-1 rounded hover:bg-blue-600 text-sm">刷新</button>
+                    </div>
                 </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">检查间隔(秒)</label>
-                    <input type="number" id="auto-verify-interval" class="w-full border rounded px-3 py-2" min="60" value="300">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-1">错误码(逗号分隔)</label>
-                    <input type="text" id="auto-verify-codes" class="w-full border rounded px-3 py-2" value="403">
-                </div>
-                <div class="flex items-end gap-2">
-                    <button onclick="saveConfig()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">保存</button>
-                    <button onclick="triggerVerify()" class="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600">立即检验</button>
-                </div>
-            </div>
-            <div id="verify-status" class="text-sm text-gray-600 mb-4"></div>
-            <div id="verify-history" class="max-h-48 overflow-y-auto text-sm bg-gray-50 rounded p-3"></div>
-        </div>
-
-        <!-- Quota Monitor Section -->
-        <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex flex-wrap justify-between items-center mb-4 gap-2">
-                <h2 class="text-xl font-semibold">凭证额度监控</h2>
-                <div class="flex flex-wrap gap-2 items-center">
-                    <select id="quota-filter" onchange="applyFilter()" class="border rounded px-2 py-1 text-sm">
-                        <option value="all">全部凭证</option>
-                    </select>
-                    <select id="quota-sort" onchange="applySort()" class="border rounded px-2 py-1 text-sm">
-                        <option value="name">按名称</option>
-                        <option value="quota-asc">额度升序</option>
-                        <option value="quota-desc">额度降序</option>
-                        <option value="low-first">低额度优先</option>
-                    </select>
-                    <span id="quota-cache-info" class="text-sm text-gray-500"></span>
-                    <button onclick="refreshQuota()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-sm">刷新</button>
+                <div id="log-container" class="log-container"></div>
+                <div class="mt-2 text-sm text-gray-500">
+                    <span id="log-count">0</span> 条日志记录
                 </div>
             </div>
-            <div id="quota-cards" class="card-grid"></div>
         </div>
     </div>
 
     <script>
         const API_BASE = '';
+        let currentLayout = 'detail';
+        let allLogs = [];
+        let filteredLogs = [];
 
         async function api(path, options = {}) {
             const resp = await fetch(API_BASE + path, {
@@ -95,6 +161,29 @@
                 ...options
             });
             return resp.json();
+        }
+
+        // Tab switching
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.add('hidden'));
+            document.getElementById('tab-' + tab).classList.add('active');
+            document.getElementById('panel-' + tab).classList.remove('hidden');
+            if (tab === 'logs') {
+                refreshLogs();
+            }
+        }
+
+        // Layout switching
+        function setLayout(layout) {
+            currentLayout = layout;
+            document.getElementById('layout-detail').className = layout === 'detail'
+                ? 'px-3 py-1 text-sm bg-blue-500 text-white'
+                : 'px-3 py-1 text-sm bg-gray-200 text-gray-700';
+            document.getElementById('layout-compact').className = layout === 'compact'
+                ? 'px-3 py-1 text-sm bg-blue-500 text-white'
+                : 'px-3 py-1 text-sm bg-gray-200 text-gray-700';
+            renderQuota(quotaData);
         }
 
         async function loadConfig() {
@@ -187,12 +276,104 @@
             if (data.success) {
                 alert(`检验完成: ${data.verified}/${data.total} 个凭证`);
                 loadVerifyHistory();
+                refreshLogs();
             } else {
                 alert('检验失败: ' + (data.detail || data.message));
             }
         }
 
-        let quotaData = null; // Store quota data for filtering/sorting
+        // Logs functions
+        async function refreshLogs() {
+            const data = await api('/api/verify/history');
+            if (data.success) {
+                allLogs = data.history;
+                filterLogs();
+            }
+        }
+
+        function filterLogs() {
+            const filter = document.getElementById('log-filter').value;
+            if (filter === 'all') {
+                filteredLogs = [...allLogs];
+            } else if (filter === 'success') {
+                filteredLogs = allLogs.filter(log => log.success === true);
+            } else if (filter === 'failed') {
+                filteredLogs = allLogs.filter(log => log.success === false);
+            }
+            displayLogs();
+        }
+
+        function displayLogs() {
+            const container = document.getElementById('log-container');
+            const countEl = document.getElementById('log-count');
+            countEl.textContent = filteredLogs.length;
+
+            if (filteredLogs.length === 0) {
+                container.innerHTML = '<span class="log-info">暂无日志记录</span>';
+                return;
+            }
+
+            container.innerHTML = filteredLogs.map(log => {
+                const time = new Date(log.timestamp).toLocaleString();
+                const type = log.type || 'verify';
+                let statusClass = 'log-info';
+                let statusText = 'INFO';
+
+                if (type === 'error') {
+                    statusClass = 'log-error';
+                    statusText = 'ERROR';
+                } else if (log.success === true) {
+                    statusClass = 'log-success';
+                    statusText = 'SUCCESS';
+                } else if (log.success === false) {
+                    statusClass = 'log-error';
+                    statusText = 'FAILED';
+                }
+
+                const filename = log.filename || '';
+                const message = log.message || '';
+
+                return `<div class="${statusClass}">[${time}] [${statusText}] ${filename} ${message ? '- ' + message : ''}</div>`;
+            }).join('\n');
+
+            if (document.getElementById('log-auto-scroll').checked) {
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+
+        async function downloadLogs() {
+            const resp = await fetch('/api/verify/history/download');
+            if (resp.ok) {
+                const contentDisposition = resp.headers.get('Content-Disposition');
+                let filename = 'gcli2api-helper_logs.txt';
+                if (contentDisposition) {
+                    const match = contentDisposition.match(/filename=(.+)/);
+                    if (match) filename = match[1];
+                }
+                const blob = await resp.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                window.URL.revokeObjectURL(url);
+            } else {
+                alert('下载失败');
+            }
+        }
+
+        async function clearLogs() {
+            if (!confirm('确定要清空所有日志吗？')) return;
+            const data = await api('/api/verify/history/clear', { method: 'POST' });
+            if (data.success) {
+                allLogs = [];
+                filteredLogs = [];
+                displayLogs();
+                loadVerifyHistory();
+            }
+        }
+
+        let quotaData = null;
 
         async function loadQuota() {
             const data = await api('/api/quota');
@@ -223,6 +404,12 @@
             return quotas.length > 0 ? Math.min(...quotas) : 1;
         }
 
+        function getAvgQuota(cred) {
+            const models = cred.quota?.models || {};
+            const quotas = Object.values(models).map(m => m.remaining !== undefined ? m.remaining : 1);
+            return quotas.length > 0 ? quotas.reduce((a, b) => a + b, 0) / quotas.length : 1;
+        }
+
         function applyFilter() {
             renderQuota(quotaData);
         }
@@ -233,13 +420,13 @@
 
         function renderQuota(data) {
             const cacheInfo = document.getElementById('quota-cache-info');
-            if (data.cache_time) {
+            if (data && data.cache_time) {
                 const time = new Date(data.cache_time).toLocaleString();
                 cacheInfo.textContent = `缓存: ${time}${data.cached ? '' : ' (已刷新)'}`;
             }
 
             const container = document.getElementById('quota-cards');
-            if (!data.success || !data.data || data.data.length === 0) {
+            if (!data || !data.success || !data.data || data.data.length === 0) {
                 container.innerHTML = '<div class="text-gray-400">暂无凭证数据，请先连接并刷新</div>';
                 return;
             }
@@ -268,14 +455,69 @@
                 sortedData.sort((a, b) => a.filename.localeCompare(b.filename));
             }
 
-            container.innerHTML = sortedData.map(cred => {
+            if (currentLayout === 'compact') {
+                renderCompactLayout(container, sortedData);
+            } else {
+                renderDetailLayout(container, sortedData);
+            }
+        }
+
+        function renderCompactLayout(container, data) {
+            container.className = '';
+            container.innerHTML = `
+                <table class="compact-table">
+                    <thead>
+                        <tr>
+                            <th>凭证名称</th>
+                            <th>邮箱</th>
+                            <th>状态</th>
+                            <th>平均额度</th>
+                            <th>最低额度</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.map(cred => {
+                            const minQuota = getMinQuota(cred);
+                            const avgQuota = getAvgQuota(cred);
+                            const minPct = Math.round(minQuota * 100);
+                            const avgPct = Math.round(avgQuota * 100);
+
+                            let statusBadge = '';
+                            if (cred.disabled) {
+                                statusBadge = '<span class="bg-red-100 text-red-600 text-xs px-2 py-1 rounded">禁用</span>';
+                            } else if (minQuota < 0.2) {
+                                statusBadge = '<span class="bg-orange-100 text-orange-600 text-xs px-2 py-1 rounded">⚠️ 低额度</span>';
+                            } else {
+                                statusBadge = '<span class="bg-green-100 text-green-600 text-xs px-2 py-1 rounded">正常</span>';
+                            }
+
+                            const minColor = minPct > 50 ? 'text-green-600' : minPct > 20 ? 'text-yellow-600' : 'text-red-600';
+                            const avgColor = avgPct > 50 ? 'text-green-600' : avgPct > 20 ? 'text-yellow-600' : 'text-red-600';
+
+                            return `
+                                <tr>
+                                    <td class="font-medium text-sm">${cred.filename}</td>
+                                    <td class="text-sm text-gray-500">${cred.user_email || '-'}</td>
+                                    <td>${statusBadge}</td>
+                                    <td class="${avgColor} font-medium">${avgPct}%</td>
+                                    <td class="${minColor} font-medium">${minPct}%</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function renderDetailLayout(container, data) {
+            container.className = 'card-grid';
+            container.innerHTML = data.map(cred => {
                 const quota = cred.quota || {};
                 const models = quota.models || {};
                 const minQuota = getMinQuota(cred);
                 const cardClass = minQuota < 0.2 ? 'card-danger' : minQuota < 0.5 ? 'card-warning' : '';
 
                 const modelList = Object.entries(models).map(([name, info]) => {
-                    // remaining is already a 0-1 fraction from the API
                     const pct = info.remaining !== undefined
                         ? Math.round(info.remaining * 100)
                         : 100;

@@ -1,10 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -166,6 +167,27 @@ async def api_verify_trigger():
         raise HTTPException(status_code=400, detail="Not connected")
     result = await auto_verify_service.trigger_now(config.auto_verify_error_codes)
     return result
+
+
+@app.get("/api/verify/history/download")
+async def api_verify_history_download():
+    """Download verify history as text file"""
+    content = auto_verify_service.export_history()
+    if not content:
+        content = "No history records"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"gcli2api-helper_logs_{timestamp}.txt"
+    return PlainTextResponse(
+        content=content,
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
+    )
+
+
+@app.post("/api/verify/history/clear")
+async def api_verify_history_clear():
+    """Clear verify history"""
+    auto_verify_service.clear_history()
+    return {"success": True, "message": "History cleared"}
 
 
 @app.get("/api/quota")
