@@ -15,6 +15,7 @@ from sse_starlette.sse import EventSourceResponse
 from config import config
 from services.api_client import GcliApiClient
 from services.auto_verify import auto_verify_service
+from services.log_forwarder import log_forwarder
 from services.quota_monitor import quota_monitor_service
 
 logging.basicConfig(level=logging.INFO)
@@ -35,8 +36,9 @@ async def broadcast_log(log_entry: dict):
             pass
 
 
-# Set SSE callback for auto_verify_service
+# Set SSE callback for auto_verify_service and log_forwarder
 auto_verify_service.set_log_callback(broadcast_log)
+log_forwarder.set_log_callback(broadcast_log)
 
 
 @asynccontextmanager
@@ -52,6 +54,7 @@ async def lifespan(app: FastAPI):
     # Cleanup
     logger.info("gcli2api-helper shutting down...")
     await auto_verify_service.stop()
+    await log_forwarder.disconnect()
     if api_client:
         await api_client.close()
 
@@ -89,6 +92,10 @@ async def connect_to_gcli():
     quota_monitor_service.set_client(api_client)
     quota_monitor_service.set_cache_ttl(config.quota_refresh_interval)
     logger.info(f"Connected to {config.gcli_url}")
+
+    # Start log forwarder to receive gcli2api logs
+    await log_forwarder.disconnect()  # Disconnect if already connected
+    await log_forwarder.connect(config.gcli_url, config.gcli_password)
 
     # Start auto verify if enabled
     if config.auto_verify_enabled:
@@ -265,6 +272,7 @@ async def api_status():
         "gcli_url": config.gcli_url,
         "auto_verify": auto_verify_service.get_status(),
         "quota_monitor": quota_monitor_service.get_status(),
+        "log_forwarder": log_forwarder.get_status(),
     }
 
 

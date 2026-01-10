@@ -205,6 +205,7 @@
         .log-error { color: #F87171; }
         .log-info { color: #94A3B8; }
         .log-warning { color: #FBBF24; }
+        .log-gcli2api { color: #A78BFA; }  /* Purple for gcli2api logs */
 
         /* SSE Status Indicator */
         .sse-status {
@@ -690,6 +691,9 @@
                 } else if (type === 'warning') {
                     statusClass = 'log-warning';
                     statusText = 'WARNING';
+                } else if (type === 'gcli2api') {
+                    statusClass = 'log-gcli2api';
+                    statusText = 'GCLI';
                 } else if (type === 'info') {
                     statusClass = 'log-info';
                     statusText = 'INFO';
@@ -703,8 +707,9 @@
 
                 const filename = log.filename || '';
                 const message = log.message || '';
+                const source = log.source ? `[${log.source}]` : '';
 
-                return `<div class="${statusClass}">[${time}] [${statusText}] ${filename} ${message ? '- ' + message : ''}</div>`;
+                return `<div class="${statusClass}">[${time}] [${statusText}] ${source} ${filename} ${message ? '- ' + message : ''}</div>`;
             }).join('\n');
 
             if (document.getElementById('log-auto-scroll').checked) {

@@ -91,30 +91,64 @@ class AutoVerifyService:
             return
 
         logger.info(f"Found {len(to_verify)} credentials to verify")
+        await self._add_history({
+            "type": "info",
+            "message": f"发现 {len(to_verify)} 个需要恢复的凭证"
+        })
 
         # Verify each credential
+        success_count = 0
+        fail_count = 0
         for cred in to_verify:
             filename = cred.get("filename")
             if not filename:
                 continue
+            old_errors = cred.get("error_codes", [])
+            user_email = cred.get("user_email", "")
+
+            # Log before restore
+            await self._add_history({
+                "type": "info",
+                "message": f"正在恢复 {filename}，错误码: {old_errors}"
+            })
+
             try:
                 result = await self._client.verify_credential(filename)
                 success = result.get("success", False)
-                await self._add_history({
-                    "type": "verify",
-                    "filename": filename,
-                    "success": success,
-                    "message": result.get("message", ""),
-                })
+                message = result.get("message", "")
+
+                if success:
+                    success_count += 1
+                    await self._add_history({
+                        "type": "verify",
+                        "filename": filename,
+                        "success": True,
+                        "message": f"恢复成功 - {message}" if message else "恢复成功，凭证已启用",
+                    })
+                else:
+                    fail_count += 1
+                    await self._add_history({
+                        "type": "verify",
+                        "filename": filename,
+                        "success": False,
+                        "message": f"恢复失败 - {message}" if message else "恢复失败",
+                    })
                 logger.info(f"Verified {filename}: success={success}")
             except Exception as e:
+                fail_count += 1
                 await self._add_history({
                     "type": "verify",
                     "filename": filename,
                     "success": False,
-                    "message": str(e),
+                    "message": f"恢复异常: {str(e)}",
                 })
                 logger.warning(f"Failed to verify {filename}: {e}")
+
+        # Summary log
+        await self._add_history({
+            "type": "info",
+            "message": f"本轮检验完成: 成功 {success_count} 个, 失败 {fail_count} 个"
+        })
 
     async def trigger_now(self, error_codes: List[int] = None) -> Dict[str, Any]:
         """Manually trigger verification for all credentials"""
