@@ -101,21 +101,16 @@ class AutoVerifyService:
                 })
                 logger.warning(f"Failed to verify {filename}: {e}")
 
-    async def trigger_now(self, error_codes: List[int]) -> Dict[str, Any]:
-        """Manually trigger verification"""
+    async def trigger_now(self, error_codes: List[int] = None) -> Dict[str, Any]:
+        """Manually trigger verification for all credentials"""
         if not self._client:
             return {"success": False, "message": "Not connected"}
 
         results = []
-        disabled = await self._client.get_disabled_credentials()
+        # Get all credentials (not just disabled)
+        all_creds = await self._client.get_all_credentials()
 
-        to_verify = []
-        for cred in disabled:
-            cred_errors = cred.get("error_codes", [])
-            if any(code in error_codes for code in cred_errors):
-                to_verify.append(cred)
-
-        for cred in to_verify:
+        for cred in all_creds:
             filename = cred.get("filename")
             if not filename:
                 continue
@@ -141,7 +136,7 @@ class AutoVerifyService:
 
         return {
             "success": True,
-            "total": len(to_verify),
+            "total": len(all_creds),
             "verified": len(results),
             "results": results,
         }

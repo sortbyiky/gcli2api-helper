@@ -55,6 +55,11 @@ class GcliApiClient:
         result = await self.get_credentials(status_filter="disabled", mode=mode)
         return result.get("items", [])
 
+    async def get_all_credentials(self, mode: str = "geminicli") -> List[Dict[str, Any]]:
+        """Get all credentials (no status filter)"""
+        result = await self.get_credentials(status_filter="all", mode=mode)
+        return result.get("items", [])
+
     async def verify_credential(self, filename: str, mode: str = "geminicli") -> Dict[str, Any]:
         """Verify a single credential"""
         url = f"{self.base_url}/creds/verify-project/{filename}"
