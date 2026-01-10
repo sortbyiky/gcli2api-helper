@@ -1,0 +1,162 @@
+import asyncio
+import logging
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from .api_client import GcliApiClient
+
+logger = logging.getLogger(__name__)
+
+
+class AutoVerifyService:
+    def __init__(self):
+        self._running = False
+        self._task: Optional[asyncio.Task] = None
+        self._client: Optional[GcliApiClient] = None
+        self._history: List[Dict[str, Any]] = []
+        self._max_history = 100
+
+    @property
+    def is_running(self) -> bool:
+        return self._running
+
+    @property
+    def history(self) -> List[Dict[str, Any]]:
+        return self._history
+
+    def set_client(self, client: GcliApiClient):
+        self._client = client
+
+    async def start(self, interval: int, error_codes: List[int]):
+        if self._running:
+            return
+        self._running = True
+        self._task = asyncio.create_task(self._run_loop(interval, error_codes))
+        logger.info(f"Auto verify started, interval={interval}s, error_codes={error_codes}")
+
+    async def stop(self):
+        if not self._running:
+            return
+        self._running = False
+        if self._task:
+            self._task.cancel()
+            try:
+                await self._task
+            except asyncio.CancelledError:
+                pass
+            self._task = None
+        logger.info("Auto verify stopped")
+
+    async def _run_loop(self, interval: int, error_codes: List[int]):
+        while self._running:
+            try:
+                await self._check_and_verify(error_codes)
+            except Exception as e:
+                logger.error(f"Auto verify error: {e}")
+                self._add_history({"type": "error", "message": str(e)})
+            await asyncio.sleep(interval)
+
+    async def _check_and_verify(self, error_codes: List[int]):
+        if not self._client:
+            return
+
+        # Get disabled credentials
+        disabled = await self._client.get_disabled_credentials()
+        if not disabled:
+            return
+
+        # Filter by error codes
+        to_verify = []
+        for cred in disabled:
+            cred_errors = cred.get("error_codes", [])
+            if any(code in error_codes for code in cred_errors):
+                to_verify.append(cred)
+
+        if not to_verify:
+            return
+
+        logger.info(f"Found {len(to_verify)} credentials to verify")
+
+        # Verify each credential
+        for cred in to_verify:
+            filename = cred.get("filename")
+            if not filename:
+                continue
+            try:
+                result = await self._client.verify_credential(filename)
+                success = result.get("success", False)
+                self._add_history({
+                    "type": "verify",
+                    "filename": filename,
+                    "success": success,
+                    "message": result.get("message", ""),
+                })
+                logger.info(f"Verified {filename}: success={success}")
+            except Exception as e:
+                self._add_history({
+                    "type": "verify",
+                    "filename": filename,
+                    "success": False,
+                    "message": str(e),
+                })
+                logger.warning(f"Failed to verify {filename}: {e}")
+
+    async def trigger_now(self, error_codes: List[int]) -> Dict[str, Any]:
+        """Manually trigger verification"""
+        if not self._client:
+            return {"success": False, "message": "Not connected"}
+
+        results = []
+        disabled = await self._client.get_disabled_credentials()
+
+        to_verify = []
+        for cred in disabled:
+            cred_errors = cred.get("error_codes", [])
+            if any(code in error_codes for code in cred_errors):
+                to_verify.append(cred)
+
+        for cred in to_verify:
+            filename = cred.get("filename")
+            if not filename:
+                continue
+            try:
+                result = await self._client.verify_credential(filename)
+                results.append({
+                    "filename": filename,
+                    "success": result.get("success", False),
+                    "message": result.get("message", ""),
+                })
+                self._add_history({
+                    "type": "verify",
+                    "filename": filename,
+                    "success": result.get("success", False),
+                    "message": result.get("message", ""),
+                })
+            except Exception as e:
+                results.append({
+                    "filename": filename,
+                    "success": False,
+                    "message": str(e),
+                })
+
+        return {
+            "success": True,
+            "total": len(to_verify),
+            "verified": len(results),
+            "results": results,
+        }
+
+    def _add_history(self, entry: Dict[str, Any]):
+        entry["timestamp"] = datetime.now().isoformat()
+        self._history.insert(0, entry)
+        if len(self._history) > self._max_history:
+            self._history = self._history[:self._max_history]
+
+    def get_status(self) -> Dict[str, Any]:
+        return {
+            "running": self._running,
+            "history_count": len(self._history),
+        }
+
+
+auto_verify_service = AutoVerifyService()

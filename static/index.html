@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>gcli2api-helper</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; }
+        .quota-bar { height: 6px; border-radius: 3px; background: #e5e7eb; overflow: hidden; }
+        .quota-fill { height: 100%; transition: width 0.3s; }
+        .quota-high { background: #22c55e; }
+        .quota-medium { background: #eab308; }
+        .quota-low { background: #ef4444; }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+        <h1 class="text-3xl font-bold text-gray-800 mb-8">gcli2api-helper</h1>
+
+        <!-- Connection Section -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">连接配置</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">gcli2api 地址</label>
+                    <input type="text" id="gcli-url" class="w-full border rounded px-3 py-2" placeholder="http://127.0.0.1:7861">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                    <input type="password" id="gcli-password" class="w-full border rounded px-3 py-2" placeholder="密码">
+                </div>
+                <div class="flex items-end">
+                    <button onclick="connect()" class="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600">连接</button>
+                    <span id="connection-status" class="ml-4 text-sm"></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Auto Verify Section -->
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">自动检验恢复</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                <div class="flex items-center">
+                    <input type="checkbox" id="auto-verify-enabled" class="mr-2 h-5 w-5">
+                    <label class="text-sm font-medium text-gray-700">启用自动检验</label>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">检查间隔(秒)</label>
+                    <input type="number" id="auto-verify-interval" class="w-full border rounded px-3 py-2" min="60" value="300">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">错误码(逗号分隔)</label>
+                    <input type="text" id="auto-verify-codes" class="w-full border rounded px-3 py-2" value="400,403">
+                </div>
+                <div class="flex items-end gap-2">
+                    <button onclick="saveConfig()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">保存</button>
+                    <button onclick="triggerVerify()" class="bg-orange-500 text-white px-4 py-2 rounded hover:bg-orange-600">立即检验</button>
+                </div>
+            </div>
+            <div id="verify-status" class="text-sm text-gray-600 mb-4"></div>
+            <div id="verify-history" class="max-h-48 overflow-y-auto text-sm bg-gray-50 rounded p-3"></div>
+        </div>
+
+        <!-- Quota Monitor Section -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-semibold">凭证额度监控</h2>
+                <div class="flex gap-2">
+                    <span id="quota-cache-info" class="text-sm text-gray-500"></span>
+                    <button onclick="refreshQuota()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 text-sm">刷新</button>
+                </div>
+            </div>
+            <div id="quota-cards" class="card-grid"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+
+        async function api(path, options = {}) {
+            const resp = await fetch(API_BASE + path, {
+                headers: { 'Content-Type': 'application/json' },
+                ...options
+            });
+            return resp.json();
+        }
+
+        async function loadConfig() {
+            const data = await api('/api/config');
+            if (data.success) {
+                const c = data.config;
+                document.getElementById('gcli-url').value = c.gcli_url || '';
+                document.getElementById('gcli-password').value = c.gcli_password || '';
+                document.getElementById('auto-verify-enabled').checked = c.auto_verify_enabled;
+                document.getElementById('auto-verify-interval').value = c.auto_verify_interval;
+                document.getElementById('auto-verify-codes').value = (c.auto_verify_error_codes || []).join(',');
+                updateConnectionStatus(data.connected);
+            }
+        }
+
+        function updateConnectionStatus(connected) {
+            const el = document.getElementById('connection-status');
+            if (connected) {
+                el.innerHTML = '<span class="text-green-600">✓ 已连接</span>';
+            } else {
+                el.innerHTML = '<span class="text-red-600">✗ 未连接</span>';
+            }
+        }
+
+        async function connect() {
+            const url = document.getElementById('gcli-url').value;
+            const password = document.getElementById('gcli-password').value;
+            try {
+                const data = await api('/api/connect', {
+                    method: 'POST',
+                    body: JSON.stringify({ url, password })
+                });
+                if (data.success) {
+                    updateConnectionStatus(true);
+                    loadVerifyStatus();
+                    loadQuota();
+                } else {
+                    alert('连接失败: ' + (data.detail || data.message));
+                }
+            } catch (e) {
+                alert('连接失败: ' + e.message);
+            }
+        }
+
+        async function saveConfig() {
+            const codes = document.getElementById('auto-verify-codes').value
+                .split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+            const data = await api('/api/config', {
+                method: 'POST',
+                body: JSON.stringify({
+                    auto_verify_enabled: document.getElementById('auto-verify-enabled').checked,
+                    auto_verify_interval: parseInt(document.getElementById('auto-verify-interval').value),
+                    auto_verify_error_codes: codes
+                })
+            });
+            if (data.success) {
+                loadVerifyStatus();
+            }
+        }
+
+        async function loadVerifyStatus() {
+            const data = await api('/api/verify/status');
+            if (data.success) {
+                const el = document.getElementById('verify-status');
+                const status = data.running ? '运行中' : '已停止';
+                el.innerHTML = `状态: <span class="${data.running ? 'text-green-600' : 'text-gray-500'}">${status}</span> | 间隔: ${data.interval}秒 | 错误码: ${data.error_codes.join(', ')}`;
+            }
+            loadVerifyHistory();
+        }
+
+        async function loadVerifyHistory() {
+            const data = await api('/api/verify/history');
+            if (data.success) {
+                const el = document.getElementById('verify-history');
+                if (data.history.length === 0) {
+                    el.innerHTML = '<span class="text-gray-400">暂无检验记录</span>';
+                } else {
+                    el.innerHTML = data.history.slice(0, 20).map(h => {
+                        const time = new Date(h.timestamp).toLocaleString();
+                        const icon = h.success ? '✓' : '✗';
+                        const color = h.success ? 'text-green-600' : 'text-red-600';
+                        return `<div class="py-1 border-b border-gray-200"><span class="${color}">${icon}</span> [${time}] ${h.filename || ''} - ${h.message || ''}</div>`;
+                    }).join('');
+                }
+            }
+        }
+
+        async function triggerVerify() {
+            const data = await api('/api/verify/trigger', { method: 'POST' });
+            if (data.success) {
+                alert(`检验完成: ${data.verified}/${data.total} 个凭证`);
+                loadVerifyHistory();
+            } else {
+                alert('检验失败: ' + (data.detail || data.message));
+            }
+        }
+
+        async function loadQuota() {
+            const data = await api('/api/quota');
+            renderQuota(data);
+        }
+
+        async function refreshQuota() {
+            const data = await api('/api/quota/refresh', { method: 'POST' });
+            renderQuota(data);
+        }
+
+        function renderQuota(data) {
+            const cacheInfo = document.getElementById('quota-cache-info');
+            if (data.cache_time) {
+                const time = new Date(data.cache_time).toLocaleString();
+                cacheInfo.textContent = `缓存时间: ${time}${data.cached ? ' (缓存)' : ' (已刷新)'}`;
+            }
+
+            const container = document.getElementById('quota-cards');
+            if (!data.success || !data.data || data.data.length === 0) {
+                container.innerHTML = '<div class="text-gray-400">暂无凭证数据，请先连接并刷新</div>';
+                return;
+            }
+
+            container.innerHTML = data.data.map(cred => {
+                const quota = cred.quota || {};
+                const models = quota.models || {};
+                const modelList = Object.entries(models).map(([name, info]) => {
+                    const pct = info.remaining !== undefined && info.quota !== undefined
+                        ? Math.round((info.remaining / info.quota) * 100)
+                        : (info.percentage !== undefined ? info.percentage : 100);
+                    const colorClass = pct > 50 ? 'quota-high' : pct > 20 ? 'quota-medium' : 'quota-low';
+                    return `
+                        <div class="mb-2">
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="truncate" title="${name}">${name}</span>
+                                <span class="${pct > 50 ? 'text-green-600' : pct > 20 ? 'text-yellow-600' : 'text-red-600'}">${pct}%</span>
+                            </div>
+                            <div class="quota-bar"><div class="quota-fill ${colorClass}" style="width: ${pct}%"></div></div>
+                        </div>
+                    `;
+                }).join('');
+
+                const statusBadge = cred.disabled
+                    ? '<span class="bg-red-100 text-red-600 text-xs px-2 py-1 rounded">禁用</span>'
+                    : '<span class="bg-green-100 text-green-600 text-xs px-2 py-1 rounded">正常</span>';
+
+                return `
+                    <div class="bg-gray-50 rounded-lg p-4 border">
+                        <div class="flex justify-between items-start mb-3">
+                            <div class="truncate flex-1 mr-2">
+                                <div class="font-medium text-sm truncate" title="${cred.filename}">${cred.filename}</div>
+                                <div class="text-xs text-gray-500 truncate">${cred.user_email || ''}</div>
+                            </div>
+                            ${statusBadge}
+                        </div>
+                        <div class="space-y-1">
+                            ${modelList || '<div class="text-xs text-gray-400">无额度信息</div>'}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Initial load
+        loadConfig();
+        setInterval(loadVerifyStatus, 30000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  gcli2api-helper:
+    build: .
+    container_name: gcli2api-helper
+    ports:
+      - "7862:7862"
+    volumes:
+      - ./config.json:/app/config.json
+    restart: unless-stopped
+    environment:
+      - TZ=Asia/Shanghai
