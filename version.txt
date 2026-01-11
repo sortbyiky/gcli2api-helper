@@ -1,4 +1,4 @@
-short_hash=f3ef237
-full_hash=f3ef237d67ff708427f50808ee29235a7fdad53e
-message=移除立即检验进度条（并行执行太快无实际意义）
-date=2026-01-11 23:55:52 +0800
+short_hash=ffebf29
+full_hash=ffebf29508da6d02b059e5d85656076bc20206a3
+message=添加模型额度刷新时间显示
+date=2026-01-12 04:35:40 +0800
