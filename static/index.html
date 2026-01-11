@@ -370,6 +370,7 @@
                 <h1 class="text-2xl font-bold text-slate-800">gcli2api-helper</h1>
                 <div id="version-info" class="flex items-center gap-2">
                     <span id="version-text" class="text-xs text-slate-500"></span>
+                    <a id="update-link" href="javascript:void(0)" onclick="showUpdateInfo()" class="text-xs text-orange-500 hover:text-orange-700 font-medium hidden">发现新版本</a>
                     <button onclick="checkUpdate()" id="btn-check-update" class="text-xs text-blue-500 hover:text-blue-700 underline hidden">检查更新</button>
                 </div>
             </div>
@@ -517,18 +518,51 @@
         }
 
         // Version functions
+        let latestVersionInfo = null;  // Store update info for display
+
         async function loadVersion() {
             try {
-                const data = await api('/api/version');
+                // Auto check for updates on page load
+                const data = await api('/api/version?check_update=true');
                 if (data.success) {
                     const versionText = document.getElementById('version-text');
                     const checkBtn = document.getElementById('btn-check-update');
+                    const updateLink = document.getElementById('update-link');
+
                     versionText.textContent = `v${data.version}`;
                     versionText.title = `${data.message}\n${data.date}`;
-                    checkBtn.classList.remove('hidden');
+
+                    // Check if there's an update
+                    if (data.check_update && data.has_update) {
+                        // Store update info
+                        latestVersionInfo = {
+                            current: data.version,
+                            latest: data.latest_version,
+                            message: data.latest_message,
+                            date: data.latest_date
+                        };
+                        // Show update link
+                        updateLink.classList.remove('hidden');
+                        updateLink.title = `最新版本: v${data.latest_version}`;
+                        checkBtn.classList.add('hidden');
+                    } else {
+                        // No update, show check button
+                        checkBtn.textContent = '已是最新';
+                        checkBtn.classList.remove('hidden');
+                    }
                 }
             } catch (e) {
                 console.error('Failed to load version:', e);
+                // Fallback: just show check update button
+                const checkBtn = document.getElementById('btn-check-update');
+                checkBtn.classList.remove('hidden');
+            }
+        }
+
+        function showUpdateInfo() {
+            if (latestVersionInfo) {
+                const msg = `发现新版本！\n\n当前版本: v${latestVersionInfo.current}\n最新版本: v${latestVersionInfo.latest}\n\n更新内容: ${latestVersionInfo.message}\n发布时间: ${latestVersionInfo.date}\n\n请使用 git pull 更新后重启服务`;
+                alert(msg);
             }
         }
 
