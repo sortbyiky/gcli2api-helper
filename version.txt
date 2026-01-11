@@ -1,4 +1,4 @@
-short_hash=e591ab1
-full_hash=e591ab1a18352dffe1cf64929adb760cf55d9d7a
-message=修复切换布局时分页消失的问题
-date=2026-01-11 16:39:12 +0800
+short_hash=d163966
+full_hash=d1639660cd99b153713906bf9d8e48068b837c75
+message=实现凭证监控 SSE 推送更新机制
+date=2026-01-11 16:55:06 +0800
