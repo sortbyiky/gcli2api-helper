@@ -1,4 +1,4 @@
-short_hash=1f90909
-full_hash=1f90909ff732beb8f252e3b318ae6997890d9152
-message=凭证检验并行化优化，添加实时进度推送
-date=2026-01-11 18:46:34 +0800
+short_hash=f3ef237
+full_hash=f3ef237d67ff708427f50808ee29235a7fdad53e
+message=移除立即检验进度条（并行执行太快无实际意义）
+date=2026-01-11 23:55:52 +0800
