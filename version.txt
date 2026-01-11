@@ -1,4 +1,4 @@
-short_hash=05e0d44
-full_hash=05e0d44a3d34750d24734620dfb1da61c3c87e30
-message=优化模型统计加载和凭证查询并行化
-date=2026-01-11 18:19:13 +0800
+short_hash=1f90909
+full_hash=1f90909ff732beb8f252e3b318ae6997890d9152
+message=凭证检验并行化优化，添加实时进度推送
+date=2026-01-11 18:46:34 +0800
