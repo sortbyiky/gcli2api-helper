@@ -383,13 +383,15 @@
         <!-- Tabs -->
         <div class="mb-6">
             <div class="tab-container">
-                <button class="tab-btn active" onclick="switchTab('monitor')" id="tab-monitor">📊 监控</button>
+                <button class="tab-btn active" onclick="switchTab('connection')" id="tab-connection">🔗 连接</button>
+                <button class="tab-btn" onclick="switchTab('credentials')" id="tab-credentials">📈 凭证监控</button>
+                <button class="tab-btn" onclick="switchTab('stats')" id="tab-stats">📊 模型统计</button>
                 <button class="tab-btn" onclick="switchTab('logs')" id="tab-logs">📋 日志</button>
             </div>
         </div>
 
-        <!-- Monitor Tab -->
-        <div id="panel-monitor" class="tab-panel space-y-6">
+        <!-- Connection Tab -->
+        <div id="panel-connection" class="tab-panel space-y-6">
             <!-- Connection Section -->
             <div class="card">
                 <h2 class="card-header">🔗 连接配置</h2>
@@ -433,7 +435,10 @@
                 <div id="verify-status" class="text-sm text-slate-600 mb-4"></div>
                 <div id="verify-history" class="history-preview"></div>
             </div>
+        </div>
 
+        <!-- Credentials Tab -->
+        <div id="panel-credentials" class="tab-panel hidden">
             <!-- Quota Monitor Section -->
             <div class="card">
                 <div class="flex flex-wrap justify-between items-center mb-5 gap-3">
@@ -458,7 +463,10 @@
                 </div>
                 <div id="quota-cards" class="card-grid"></div>
             </div>
+        </div>
 
+        <!-- Stats Tab -->
+        <div id="panel-stats" class="tab-panel hidden">
             <!-- Model Stats Section -->
             <div class="card">
                 <div class="flex flex-wrap justify-between items-center mb-5 gap-3">
