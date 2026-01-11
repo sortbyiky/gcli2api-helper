@@ -1,4 +1,4 @@
-short_hash=e0bbbb8
-full_hash=e0bbbb80ef6979d12262c8582807dc8f858c994c
-message=chore: 更新 version.txt
-date=2026-01-11 10:48:17 +0800
+short_hash=a10d00d
+full_hash=a10d00d97b2071ccdc2dda94355dda8ec135dc6d
+message=新增版本自动更新 workflow 和修复 tabs 布局
+date=2026-01-11 15:05:45 +0800
