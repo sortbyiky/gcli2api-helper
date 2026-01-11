@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import subprocess
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +26,60 @@ api_client: Optional[GcliApiClient] = None
 
 # SSE clients management
 sse_clients: List[asyncio.Queue] = []
+
+# Cache for git version info (populated at startup)
+_git_version_cache: Optional[Dict[str, str]] = None
+
+
+def get_git_version() -> Dict[str, str]:
+    """Get version info from git, with fallback to version.txt"""
+    global _git_version_cache
+
+    if _git_version_cache is not None:
+        return _git_version_cache
+
+    project_root = Path(__file__).parent
+
+    # Try to get version from git
+    try:
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%h|%H|%s|%ci"],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            parts = result.stdout.strip().split("|", 3)
+            if len(parts) == 4:
+                _git_version_cache = {
+                    "short_hash": parts[0],
+                    "full_hash": parts[1],
+                    "message": parts[2],
+                    "date": parts[3],
+                }
+                logger.info(f"Version from git: {_git_version_cache['short_hash']}")
+                return _git_version_cache
+    except Exception as e:
+        logger.debug(f"Failed to get version from git: {e}")
+
+    # Fallback to version.txt
+    version_file = project_root / "version.txt"
+    if version_file.exists():
+        version_data = {}
+        with open(version_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if "=" in line:
+                    key, value = line.split("=", 1)
+                    version_data[key] = value
+        if version_data:
+            _git_version_cache = version_data
+            logger.info(f"Version from file: {version_data.get('short_hash', 'unknown')}")
+            return _git_version_cache
+
+    _git_version_cache = {"short_hash": "unknown", "full_hash": "", "message": "", "date": ""}
+    return _git_version_cache
 
 
 async def broadcast_log(log_entry: dict):
@@ -281,22 +336,11 @@ async def api_version(check_update: bool = False):
     """Get version info and optionally check for updates"""
     import httpx
 
-    project_root = Path(__file__).parent
-    version_file = project_root / "version.txt"
+    # Get version from git (or fallback to version.txt)
+    version_data = get_git_version()
 
-    if not version_file.exists():
-        return {"success": False, "error": "version.txt not found"}
-
-    version_data = {}
-    with open(version_file, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if "=" in line:
-                key, value = line.split("=", 1)
-                version_data[key] = value
-
-    if "short_hash" not in version_data:
-        return {"success": False, "error": "Invalid version.txt format"}
+    if not version_data.get("short_hash"):
+        return {"success": False, "error": "Cannot get version info"}
 
     response_data = {
         "success": True,
