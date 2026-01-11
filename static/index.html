@@ -986,7 +986,11 @@
                 ? 'layout-btn active' : 'layout-btn';
             document.getElementById('layout-compact').className = layout === 'compact'
                 ? 'layout-btn active' : 'layout-btn';
-            renderQuota(quotaData);
+            if (useFullData) {
+                renderQuota(quotaData);
+            } else {
+                renderQuotaPaginated(quotaData);
+            }
         }
 
         async function loadConfig() {
