@@ -331,6 +331,22 @@ async def api_status():
     }
 
 
+@app.get("/api/stats")
+async def api_get_stats():
+    """获取模型调用统计数据"""
+    return {
+        "success": True,
+        "stats": log_forwarder.get_stats(),
+    }
+
+
+@app.post("/api/stats/reset")
+async def api_reset_stats():
+    """重置统计数据"""
+    log_forwarder.reset_stats()
+    return {"success": True, "message": "Stats reset"}
+
+
 @app.get("/api/version")
 async def api_version(check_update: bool = False):
     """Get version info and optionally check for updates"""

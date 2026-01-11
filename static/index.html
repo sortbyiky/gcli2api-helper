@@ -458,6 +458,20 @@
                 </div>
                 <div id="quota-cards" class="card-grid"></div>
             </div>
+
+            <!-- Model Stats Section -->
+            <div class="card">
+                <div class="flex flex-wrap justify-between items-center mb-5 gap-3">
+                    <h2 class="card-header mb-0">📊 模型调用统计</h2>
+                    <div class="flex gap-3">
+                        <button onclick="refreshStats()" id="btn-refresh-stats" class="btn btn-primary btn-sm">刷新</button>
+                        <button onclick="resetStats()" id="btn-reset-stats" class="btn btn-secondary btn-sm">重置</button>
+                    </div>
+                </div>
+                <div id="stats-container">
+                    <div class="text-center text-slate-500 py-8">暂无统计数据</div>
+                </div>
+            </div>
         </div>
 
         <!-- Logs Tab -->
@@ -1087,7 +1101,99 @@
             loadConfig();
             connectSSE();
             setInterval(loadVerifyStatus, 30000);
+            refreshStats();  // 加载统计数据
         });
+
+        // Stats functions
+        async function refreshStats() {
+            try {
+                const res = await fetch(`${API_BASE}/api/stats`);
+                const data = await res.json();
+                if (data.success) {
+                    renderStats(data.stats);
+                }
+            } catch (err) {
+                console.error('Failed to load stats:', err);
+            }
+        }
+
+        async function resetStats() {
+            if (!confirm('确定要重置统计数据吗?')) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/stats/reset`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    await refreshStats();
+                }
+            } catch (err) {
+                alert('重置失败: ' + err.message);
+            }
+        }
+
+        function renderStats(stats) {
+            const container = document.getElementById('stats-container');
+            if (!stats || !stats.models || Object.keys(stats.models).length === 0) {
+                container.innerHTML = '<div class="text-center text-slate-500 py-8">暂无统计数据</div>';
+                return;
+            }
+
+            const totalCalls = stats.total_calls || 0;
+            const totalTokens = stats.total_tokens || 0;
+            const models = stats.models || {};
+
+            let html = `
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-blue-50 rounded-lg p-4">
+                        <div class="text-sm text-blue-600 mb-1">总调用次数</div>
+                        <div class="text-2xl font-bold text-blue-700">${totalCalls.toLocaleString()}</div>
+                    </div>
+                    <div class="bg-green-50 rounded-lg p-4">
+                        <div class="text-sm text-green-600 mb-1">总 Token 消耗</div>
+                        <div class="text-2xl font-bold text-green-700">${totalTokens.toLocaleString()}</div>
+                    </div>
+                    <div class="bg-purple-50 rounded-lg p-4">
+                        <div class="text-sm text-purple-600 mb-1">模型数量</div>
+                        <div class="text-2xl font-bold text-purple-700">${Object.keys(models).length}</div>
+                    </div>
+                </div>
+                <div class="space-y-4">
+            `;
+
+            for (const [modelName, modelData] of Object.entries(models)) {
+                const calls = modelData.calls || 0;
+                const tokens = modelData.tokens || 0;
+                const avgTokens = calls > 0 ? Math.round(tokens / calls) : 0;
+                const pct = totalCalls > 0 ? ((calls / totalCalls) * 100).toFixed(1) : 0;
+
+                html += `
+                    <div class="bg-slate-50 rounded-lg p-4">
+                        <div class="flex justify-between items-start mb-3">
+                            <div class="flex-1">
+                                <div class="font-semibold text-slate-800">${modelName}</div>
+                                <div class="text-xs text-slate-500 mt-1">占比 ${pct}%</div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-sm text-slate-600">${calls.toLocaleString()} 次调用</div>
+                                <div class="text-xs text-slate-500 mt-1">${tokens.toLocaleString()} tokens</div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3 text-xs">
+                            <div class="bg-white rounded p-2">
+                                <div class="text-slate-500">平均 Token</div>
+                                <div class="font-semibold text-slate-700">${avgTokens.toLocaleString()}</div>
+                            </div>
+                            <div class="bg-white rounded p-2">
+                                <div class="text-slate-500">使用占比</div>
+                                <div class="font-semibold text-slate-700">${pct}%</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += '</div>';
+            container.innerHTML = html;
+        }
     </script>
 </body>
 </html>

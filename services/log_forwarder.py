@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, Optional
 
 import websockets
 from websockets.exceptions import ConnectionClosed
+from .model_stats import ModelStatsService
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ class LogForwarder:
         self._base_url: Optional[str] = None
         self._token: Optional[str] = None
         self._reconnect_delay = 5  # seconds
+        self._stats = ModelStatsService()  # 统计服务
 
     def set_log_callback(self, callback: Callable):
         """Set callback for new log entries (for SSE)"""
@@ -91,6 +93,9 @@ class LogForwarder:
                 try:
                     message = await asyncio.wait_for(ws.recv(), timeout=30.0)
                     if message and self._on_log:
+                        # 解析日志进行统计
+                        self._stats.parse_log(message.strip())
+
                         await self._on_log({
                             "type": "gcli2api",
                             "message": message.strip(),
@@ -114,6 +119,14 @@ class LogForwarder:
             "connected": self.is_connected,
             "base_url": self._base_url,
         }
+
+    def get_stats(self) -> Dict[str, Any]:
+        """获取统计数据"""
+        return self._stats.get_stats()
+
+    def reset_stats(self):
+        """重置统计数据"""
+        self._stats.reset()
 
 
 log_forwarder = LogForwarder()
