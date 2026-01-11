@@ -456,16 +456,16 @@
         }
 
         .model-item .model-reset {
-            font-size: 9px;
-            color: #94a3b8;
-            margin-top: 2px;
+            font-size: 10px;
+            color: #666;
+            margin-top: 3px;
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            font-style: italic;
         }
 
         .model-item .model-reset .reset-icon {
-            margin-right: 2px;
+            margin-right: 3px;
+            opacity: 0.7;
         }
 
         /* Quota card compact header */
@@ -1523,27 +1523,24 @@
         }
 
         function formatResetTime(resetTime) {
-            if (!resetTime) return '';
+            if (!resetTime || resetTime === 'N/A') return '';
+            // If already formatted (MM-DD HH:mm), return directly
+            if (/^\d{2}-\d{2}\s\d{2}:\d{2}$/.test(resetTime)) {
+                return resetTime;
+            }
+            // If ISO format, convert to Beijing time (UTC+8)
             try {
-                const reset = new Date(resetTime);
-                const now = new Date();
-                const diffMs = reset - now;
-
-                if (diffMs <= 0) return '已刷新';
-
-                const diffMins = Math.floor(diffMs / (1000 * 60));
-                const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-                if (diffDays > 0) {
-                    return `${diffDays}天后刷新`;
-                } else if (diffHours > 0) {
-                    return `${diffHours}小时后刷新`;
-                } else if (diffMins > 0) {
-                    return `${diffMins}分钟后刷新`;
-                } else {
-                    return '即将刷新';
-                }
+                const date = new Date(resetTime);
+                if (isNaN(date.getTime())) return resetTime;
+                // Convert to Beijing time
+                const beijingOffset = 8 * 60;
+                const localOffset = date.getTimezoneOffset();
+                const beijingTime = new Date(date.getTime() + (beijingOffset + localOffset) * 60 * 1000);
+                const month = String(beijingTime.getMonth() + 1).padStart(2, '0');
+                const day = String(beijingTime.getDate()).padStart(2, '0');
+                const hours = String(beijingTime.getHours()).padStart(2, '0');
+                const mins = String(beijingTime.getMinutes()).padStart(2, '0');
+                return `${month}-${day} ${hours}:${mins}`;
             } catch (e) {
                 return resetTime;
             }
