@@ -1131,10 +1131,20 @@
         }
 
         async function loadQuota() {
-            const data = await api('/api/quota');
-            quotaData = data;
-            updateFilterOptions();
-            renderQuota(data);
+            const container = document.getElementById('quota-cards');
+            if (container) {
+                container.innerHTML = '<div class="text-center py-8"><div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div><div class="text-slate-500 mt-2">加载中...</div></div>';
+            }
+            try {
+                const data = await api('/api/quota');
+                quotaData = data;
+                updateFilterOptions();
+                renderQuota(data);
+            } catch (e) {
+                if (container) {
+                    container.innerHTML = '<div class="text-center text-red-500 py-8">加载失败: ' + e.message + '</div>';
+                }
+            }
         }
 
         async function refreshQuota() {
