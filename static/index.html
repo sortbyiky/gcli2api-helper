@@ -457,6 +457,16 @@
                             <button onclick="setLayout('detail')" id="layout-detail" class="layout-btn active">详细</button>
                             <button onclick="setLayout('compact')" id="layout-compact" class="layout-btn">简洁</button>
                         </div>
+                        <div class="relative">
+                            <button onclick="toggleModelFilter()" id="btn-model-filter" class="btn btn-secondary btn-sm">模型过滤 ▼</button>
+                            <div id="model-filter-dropdown" class="hidden absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-48 max-h-64 overflow-y-auto">
+                                <div class="p-2 border-b border-slate-100">
+                                    <button onclick="selectAllModels()" class="text-xs text-blue-600 hover:underline mr-2">全选</button>
+                                    <button onclick="clearAllModels()" class="text-xs text-slate-500 hover:underline">清除</button>
+                                </div>
+                                <div id="model-filter-list" class="p-2 space-y-1"></div>
+                            </div>
+                        </div>
                         <span id="quota-cache-info" class="text-xs text-slate-500"></span>
                         <button onclick="refreshQuota()" id="btn-refresh-quota" class="btn btn-primary btn-sm">刷新</button>
                     </div>
@@ -519,6 +529,104 @@
         let allLogs = [];
         let filteredLogs = [];
         let eventSource = null;
+        let quotaData = null;
+
+        // localStorage keys
+        const STORAGE_KEY_VISIBLE_MODELS = 'gcli2api-helper-visible-models';
+
+        // Token formatting function - converts large numbers to K/M format
+        function formatTokens(num) {
+            if (num >= 1000000) {
+                return (num / 1000000).toFixed(2) + 'M';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(1) + 'K';
+            }
+            return num.toLocaleString();
+        }
+
+        // Model filter persistence
+        function getVisibleModels() {
+            const saved = localStorage.getItem(STORAGE_KEY_VISIBLE_MODELS);
+            return saved ? JSON.parse(saved) : null; // null = show all
+        }
+
+        function saveVisibleModels(models) {
+            if (models === null) {
+                localStorage.removeItem(STORAGE_KEY_VISIBLE_MODELS);
+            } else {
+                localStorage.setItem(STORAGE_KEY_VISIBLE_MODELS, JSON.stringify(models));
+            }
+        }
+
+        function getAllModelsFromQuota(data) {
+            const models = new Set();
+            for (const cred of data?.data || []) {
+                for (const modelName of Object.keys(cred.quota?.models || {})) {
+                    models.add(modelName);
+                }
+            }
+            return Array.from(models).sort();
+        }
+
+        // Model filter UI functions
+        function toggleModelFilter() {
+            const dropdown = document.getElementById('model-filter-dropdown');
+            dropdown.classList.toggle('hidden');
+        }
+
+        function updateModelFilterList() {
+            const allModels = getAllModelsFromQuota(quotaData);
+            const visibleModels = getVisibleModels();
+            const container = document.getElementById('model-filter-list');
+
+            container.innerHTML = allModels.map(model => {
+                const checked = visibleModels === null || visibleModels.includes(model);
+                return `
+                    <label class="flex items-center gap-2 text-xs text-slate-700 cursor-pointer hover:bg-slate-50 p-1 rounded">
+                        <input type="checkbox" value="${model}" ${checked ? 'checked' : ''} onchange="onModelFilterChange()">
+                        <span class="truncate" title="${model}">${model}</span>
+                    </label>
+                `;
+            }).join('');
+        }
+
+        function onModelFilterChange() {
+            const checkboxes = document.querySelectorAll('#model-filter-list input[type="checkbox"]');
+            const allModels = getAllModelsFromQuota(quotaData);
+            const selectedModels = Array.from(checkboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+
+            // If all selected, save null (show all)
+            if (selectedModels.length === allModels.length) {
+                saveVisibleModels(null);
+            } else {
+                saveVisibleModels(selectedModels);
+            }
+
+            renderQuota(quotaData);
+        }
+
+        function selectAllModels() {
+            document.querySelectorAll('#model-filter-list input[type="checkbox"]').forEach(cb => cb.checked = true);
+            saveVisibleModels(null);
+            renderQuota(quotaData);
+        }
+
+        function clearAllModels() {
+            document.querySelectorAll('#model-filter-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+            saveVisibleModels([]);
+            renderQuota(quotaData);
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            const dropdown = document.getElementById('model-filter-dropdown');
+            const btn = document.getElementById('btn-model-filter');
+            if (dropdown && btn && !dropdown.contains(e.target) && !btn.contains(e.target)) {
+                dropdown.classList.add('hidden');
+            }
+        });
 
         // Loading state helper
         function setLoading(btnId, loading) {
@@ -684,6 +792,14 @@
             document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.add('hidden'));
             document.getElementById('tab-' + tab).classList.add('active');
             document.getElementById('panel-' + tab).classList.remove('hidden');
+
+            // Refresh data when switching tabs
+            if (tab === 'quota') {
+                loadQuota();
+            } else if (tab === 'stats') {
+                refreshStats();
+            }
+            // logs tab uses SSE for real-time updates, no refresh needed
         }
 
         // Layout switching
@@ -1076,6 +1192,9 @@
             } else {
                 renderDetailLayout(container, sortedData);
             }
+
+            // Update model filter list
+            updateModelFilterList();
         }
 
         function renderCompactLayout(container, data) {
@@ -1127,13 +1246,17 @@
 
         function renderDetailLayout(container, data) {
             container.className = 'card-grid';
+            const visibleModels = getVisibleModels();
+
             container.innerHTML = data.map(cred => {
                 const quota = cred.quota || {};
                 const models = quota.models || {};
                 const minQuota = getMinQuota(cred);
                 const cardClass = minQuota < 0.2 ? 'danger' : minQuota < 0.5 ? 'warning' : '';
 
-                const modelList = Object.entries(models).map(([name, info]) => {
+                const modelList = Object.entries(models)
+                    .filter(([name]) => visibleModels === null || visibleModels.includes(name))
+                    .map(([name, info]) => {
                     const pct = info.remaining !== undefined ? Math.round(info.remaining * 100) : 100;
                     const colorClass = pct > 50 ? 'quota-high' : pct > 20 ? 'quota-medium' : 'quota-low';
                     const resetTime = info.resetTime || '';
@@ -1226,7 +1349,7 @@
                     </div>
                     <div class="bg-green-50 rounded-lg p-4">
                         <div class="text-sm text-green-600 mb-1">总 Token 消耗</div>
-                        <div class="text-2xl font-bold text-green-700">${totalTokens.toLocaleString()}</div>
+                        <div class="text-2xl font-bold text-green-700">${formatTokens(totalTokens)}</div>
                     </div>
                     <div class="bg-purple-50 rounded-lg p-4">
                         <div class="text-sm text-purple-600 mb-1">模型数量</div>
@@ -1251,13 +1374,13 @@
                             </div>
                             <div class="text-right">
                                 <div class="text-sm text-slate-600">${calls.toLocaleString()} 次调用</div>
-                                <div class="text-xs text-slate-500 mt-1">${tokens.toLocaleString()} tokens</div>
+                                <div class="text-xs text-slate-500 mt-1">${formatTokens(tokens)} tokens</div>
                             </div>
                         </div>
                         <div class="grid grid-cols-2 gap-3 text-xs">
                             <div class="bg-white rounded p-2">
                                 <div class="text-slate-500">平均 Token</div>
-                                <div class="font-semibold text-slate-700">${avgTokens.toLocaleString()}</div>
+                                <div class="font-semibold text-slate-700">${formatTokens(avgTokens)}</div>
                             </div>
                             <div class="bg-white rounded p-2">
                                 <div class="text-slate-500">使用占比</div>
