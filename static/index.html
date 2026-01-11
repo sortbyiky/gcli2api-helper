@@ -361,6 +361,127 @@
         }
 
         .history-item:last-child { border-bottom: none; }
+
+        /* Pagination */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .page-btn {
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            border: 1px solid var(--border);
+            background: white;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .page-btn:hover:not(:disabled) {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        .page-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        .page-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .page-info {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin: 0 8px;
+        }
+
+        /* Model Grid in Card */
+        .model-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+        }
+
+        .model-item {
+            background: white;
+            border-radius: 6px;
+            padding: 6px 8px;
+            border: 1px solid #E2E8F0;
+            transition: all 0.15s ease;
+        }
+
+        .model-item:hover {
+            border-color: var(--primary);
+            box-shadow: 0 1px 3px rgba(59,130,246,0.1);
+        }
+
+        .model-item .model-name {
+            font-size: 10px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 3px;
+        }
+
+        .model-item .model-quota {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .model-item .quota-bar {
+            flex: 1;
+            height: 4px;
+        }
+
+        .model-item .quota-pct {
+            font-size: 10px;
+            font-weight: 600;
+            min-width: 28px;
+            text-align: right;
+        }
+
+        /* Quota card compact header */
+        .quota-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #F1F5F9;
+        }
+
+        .quota-card-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 180px;
+        }
+
+        .quota-card-email {
+            font-size: 10px;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 2px;
+        }
     </style>
 </head>
 <body class="min-h-screen">
@@ -477,6 +598,12 @@
                             <option value="quota-desc">额度降序</option>
                             <option value="low-first">低额度优先</option>
                         </select>
+                        <select id="page-size" onchange="setPageSize(parseInt(this.value))" class="w-auto">
+                            <option value="6">每页 6 个</option>
+                            <option value="9" selected>每页 9 个</option>
+                            <option value="12">每页 12 个</option>
+                            <option value="999">显示全部</option>
+                        </select>
                         <div class="layout-toggle">
                             <button onclick="setLayout('detail')" id="layout-detail" class="layout-btn active">详细</button>
                             <button onclick="setLayout('compact')" id="layout-compact" class="layout-btn">简洁</button>
@@ -493,9 +620,10 @@
                         </div>
                         <span id="quota-cache-info" class="text-xs text-slate-500"></span>
                         <button onclick="refreshQuota()" id="btn-refresh-quota" class="btn btn-primary btn-sm">刷新</button>
-                    </div>
+                </div>
                 </div>
                 <div id="quota-cards" class="card-grid"></div>
+                <div id="quota-pagination"></div>
             </div>
         </div>
 
@@ -554,6 +682,21 @@
         let filteredLogs = [];
         let eventSource = null;
         let quotaData = null;
+
+        // Pagination state
+        let currentPage = 1;
+        let pageSize = 9;
+
+        function setPageSize(size) {
+            pageSize = size;
+            currentPage = 1;
+            renderQuota(quotaData);
+        }
+
+        function goToPage(page) {
+            currentPage = page;
+            renderQuota(quotaData);
+        }
 
         // localStorage keys
         const STORAGE_KEY_VISIBLE_MODELS = 'gcli2api-helper-visible-models';
@@ -1231,6 +1374,10 @@
 
         function renderCompactLayout(container, data) {
             container.className = '';
+            // Clear pagination when in compact mode
+            const paginationContainer = document.getElementById('quota-pagination');
+            if (paginationContainer) paginationContainer.innerHTML = '';
+
             container.innerHTML = `
                 <table class="compact-table">
                     <thead>
@@ -1277,54 +1424,113 @@
         }
 
         function renderDetailLayout(container, data) {
-            container.className = 'card-grid';
             const visibleModels = getVisibleModels();
 
-            container.innerHTML = data.map(cred => {
+            // Pagination logic
+            const totalItems = data.length;
+            const totalPages = Math.ceil(totalItems / pageSize);
+            if (currentPage > totalPages) currentPage = totalPages || 1;
+
+            const startIdx = (currentPage - 1) * pageSize;
+            const endIdx = Math.min(startIdx + pageSize, totalItems);
+            const pageData = data.slice(startIdx, endIdx);
+
+            // Build cards HTML
+            const cardsHtml = pageData.map(cred => {
                 const quota = cred.quota || {};
                 const models = quota.models || {};
                 const minQuota = getMinQuota(cred);
                 const cardClass = minQuota < 0.2 ? 'danger' : minQuota < 0.5 ? 'warning' : '';
 
-                const modelList = Object.entries(models)
+                const modelItems = Object.entries(models)
                     .filter(([name]) => visibleModels === null || visibleModels.includes(name))
                     .map(([name, info]) => {
-                    const pct = info.remaining !== undefined ? Math.round(info.remaining * 100) : 100;
-                    const colorClass = pct > 50 ? 'quota-high' : pct > 20 ? 'quota-medium' : 'quota-low';
-                    const resetTime = info.resetTime || '';
-                    return `
-                        <div class="mb-3">
-                            <div class="flex justify-between text-xs mb-1">
-                                <span class="truncate flex-1 text-slate-600" title="${name}">${name}</span>
-                                <span class="${pct > 50 ? 'text-green-600' : pct > 20 ? 'text-yellow-600' : 'text-red-600'} font-semibold ml-2">${pct}%</span>
+                        const pct = info.remaining !== undefined ? Math.round(info.remaining * 100) : 100;
+                        const colorClass = pct > 50 ? 'quota-high' : pct > 20 ? 'quota-medium' : 'quota-low';
+                        const pctColor = pct > 50 ? 'text-green-600' : pct > 20 ? 'text-yellow-600' : 'text-red-600';
+                        const resetTime = info.resetTime || '';
+                        return `
+                            <div class="model-item" title="${resetTime ? '重置: ' + resetTime : ''}">
+                                <div class="model-name" title="${name}">${name}</div>
+                                <div class="model-quota">
+                                    <div class="quota-bar"><div class="quota-fill ${colorClass}" style="width: ${pct}%"></div></div>
+                                    <span class="quota-pct ${pctColor}">${pct}%</span>
+                                </div>
                             </div>
-                            <div class="quota-bar"><div class="quota-fill ${colorClass}" style="width: ${pct}%"></div></div>
-                            ${resetTime ? `<div class="text-xs text-slate-400 mt-1">🔄 ${resetTime}</div>` : ''}
-                        </div>
-                    `;
-                }).join('');
+                        `;
+                    }).join('');
 
                 const statusBadge = cred.disabled
                     ? '<span class="badge badge-danger">禁用</span>'
                     : minQuota < 0.2
-                        ? '<span class="badge badge-warning">⚠️ 低额度</span>'
+                        ? '<span class="badge badge-warning">⚠️ 低</span>'
                         : '<span class="badge badge-success">正常</span>';
 
                 return `
                     <div class="quota-card ${cardClass}">
-                        <div class="flex justify-between items-start mb-4">
-                            <div class="truncate flex-1 mr-2">
-                                <div class="font-semibold text-sm text-slate-800 truncate" title="${cred.filename}">${cred.filename}</div>
-                                <div class="text-xs text-slate-500 truncate mt-1">${cred.user_email || ''}</div>
+                        <div class="quota-card-header">
+                            <div class="flex-1 min-w-0 mr-2">
+                                <div class="quota-card-title" title="${cred.filename}">${cred.filename.replace('.json', '')}</div>
+                                <div class="quota-card-email" title="${cred.user_email || ''}">${cred.user_email || ''}</div>
                             </div>
                             ${statusBadge}
                         </div>
-                        <div class="space-y-1">
-                            ${modelList || '<div class="text-xs text-slate-400">无额度信息</div>'}
+                        <div class="model-grid">
+                            ${modelItems || '<div class="text-xs text-slate-400">无额度信息</div>'}
                         </div>
                     </div>
                 `;
             }).join('');
+
+            // Build pagination HTML
+            let paginationHtml = '';
+            if (totalPages > 1) {
+                const pageButtons = [];
+
+                // Previous button
+                pageButtons.push(`<button class="page-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>上一页</button>`);
+
+                // Page numbers
+                const maxVisiblePages = 5;
+                let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+                let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+                if (endPage - startPage < maxVisiblePages - 1) {
+                    startPage = Math.max(1, endPage - maxVisiblePages + 1);
+                }
+
+                if (startPage > 1) {
+                    pageButtons.push(`<button class="page-btn" onclick="goToPage(1)">1</button>`);
+                    if (startPage > 2) pageButtons.push(`<span class="page-info">...</span>`);
+                }
+
+                for (let i = startPage; i <= endPage; i++) {
+                    pageButtons.push(`<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`);
+                }
+
+                if (endPage < totalPages) {
+                    if (endPage < totalPages - 1) pageButtons.push(`<span class="page-info">...</span>`);
+                    pageButtons.push(`<button class="page-btn" onclick="goToPage(${totalPages})">${totalPages}</button>`);
+                }
+
+                // Next button
+                pageButtons.push(`<button class="page-btn" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>下一页</button>`);
+
+                // Page info
+                pageButtons.push(`<span class="page-info">共 ${totalItems} 个凭证</span>`);
+
+                paginationHtml = `<div class="pagination">${pageButtons.join('')}</div>`;
+            } else if (totalItems > 0) {
+                paginationHtml = `<div class="pagination"><span class="page-info">共 ${totalItems} 个凭证</span></div>`;
+            }
+
+            container.className = 'card-grid';
+            container.innerHTML = cardsHtml;
+
+            // Render pagination to separate container
+            const paginationContainer = document.getElementById('quota-pagination');
+            if (paginationContainer) {
+                paginationContainer.innerHTML = paginationHtml;
+            }
         }
 
         // Initial load
