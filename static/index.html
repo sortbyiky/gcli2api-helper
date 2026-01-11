@@ -455,6 +455,19 @@
             text-align: right;
         }
 
+        .model-item .model-reset {
+            font-size: 9px;
+            color: #94a3b8;
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .model-item .model-reset .reset-icon {
+            margin-right: 2px;
+        }
+
         /* Quota card compact header */
         .quota-card-header {
             display: flex;
@@ -1509,6 +1522,33 @@
             return quotas.length > 0 ? quotas.reduce((a, b) => a + b, 0) / quotas.length : 1;
         }
 
+        function formatResetTime(resetTime) {
+            if (!resetTime) return '';
+            try {
+                const reset = new Date(resetTime);
+                const now = new Date();
+                const diffMs = reset - now;
+
+                if (diffMs <= 0) return '已刷新';
+
+                const diffMins = Math.floor(diffMs / (1000 * 60));
+                const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+                if (diffDays > 0) {
+                    return `${diffDays}天后刷新`;
+                } else if (diffHours > 0) {
+                    return `${diffHours}小时后刷新`;
+                } else if (diffMins > 0) {
+                    return `${diffMins}分钟后刷新`;
+                } else {
+                    return '即将刷新';
+                }
+            } catch (e) {
+                return resetTime;
+            }
+        }
+
         async function applyFilter() {
             const filterValue = document.getElementById('quota-filter').value;
             if (!useFullData && filterValue !== 'all') {
@@ -1592,6 +1632,7 @@
                         const colorClass = pct > 50 ? 'quota-high' : pct > 20 ? 'quota-medium' : 'quota-low';
                         const pctColor = pct > 50 ? 'text-green-600' : pct > 20 ? 'text-yellow-600' : 'text-red-600';
                         const resetTime = info.resetTime || '';
+                        const resetDisplay = formatResetTime(resetTime);
                         return `
                             <div class="model-item" title="${resetTime ? '重置: ' + resetTime : ''}">
                                 <div class="model-name" title="${name}">${name}</div>
@@ -1599,6 +1640,7 @@
                                     <div class="quota-bar"><div class="quota-fill ${colorClass}" style="width: ${pct}%"></div></div>
                                     <span class="quota-pct ${pctColor}">${pct}%</span>
                                 </div>
+                                ${resetDisplay ? `<div class="model-reset"><span class="reset-icon">⏱</span>${resetDisplay}</div>` : ''}
                             </div>
                         `;
                     }).join('');
@@ -1817,6 +1859,7 @@
                         const colorClass = pct > 50 ? 'quota-high' : pct > 20 ? 'quota-medium' : 'quota-low';
                         const pctColor = pct > 50 ? 'text-green-600' : pct > 20 ? 'text-yellow-600' : 'text-red-600';
                         const resetTime = info.resetTime || '';
+                        const resetDisplay = formatResetTime(resetTime);
                         return `
                             <div class="model-item" title="${resetTime ? '重置: ' + resetTime : ''}">
                                 <div class="model-name" title="${name}">${name}</div>
@@ -1824,6 +1867,7 @@
                                     <div class="quota-bar"><div class="quota-fill ${colorClass}" style="width: ${pct}%"></div></div>
                                     <span class="quota-pct ${pctColor}">${pct}%</span>
                                 </div>
+                                ${resetDisplay ? `<div class="model-reset"><span class="reset-icon">⏱</span>${resetDisplay}</div>` : ''}
                             </div>
                         `;
                     }).join('');
