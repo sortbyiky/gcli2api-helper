@@ -363,7 +363,27 @@
     </style>
 </head>
 <body class="min-h-screen">
-    <div class="container mx-auto px-4 py-8 max-w-7xl">
+    <!-- Login Overlay -->
+    <div id="login-overlay" class="fixed inset-0 bg-slate-900/80 flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl p-8 w-full max-w-md shadow-2xl">
+            <h1 class="text-2xl font-bold text-center mb-2 text-slate-800">gcli2api-helper</h1>
+            <p class="text-sm text-slate-500 text-center mb-6">请输入连接信息登录</p>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-2">gcli2api 地址</label>
+                    <input type="text" id="login-url" placeholder="http://127.0.0.1:7861" class="w-full">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-600 mb-2">密码</label>
+                    <input type="password" id="login-password" placeholder="请输入密码" class="w-full">
+                </div>
+                <button onclick="doLogin()" id="btn-login" class="btn btn-primary w-full py-3">登录</button>
+                <div id="login-error" class="text-red-500 text-sm text-center hidden"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-content" class="container mx-auto px-4 py-8 max-w-7xl hidden">
         <!-- Header -->
         <div class="flex items-center justify-between mb-8">
             <div class="flex items-center gap-4">
@@ -374,9 +394,12 @@
                     <button onclick="checkUpdate()" id="btn-check-update" class="text-xs text-blue-500 hover:text-blue-700 underline hidden">检查更新</button>
                 </div>
             </div>
-            <div class="sse-status" id="sse-status">
-                <span class="sse-dot" id="sse-dot"></span>
-                <span id="sse-text">未连接</span>
+            <div class="flex items-center gap-4">
+                <div class="sse-status" id="sse-status">
+                    <span class="sse-dot" id="sse-dot"></span>
+                    <span id="sse-text">未连接</span>
+                </div>
+                <button onclick="doLogout()" id="btn-logout" class="btn btn-secondary btn-sm">退出登录</button>
             </div>
         </div>
 
@@ -1295,11 +1318,7 @@
 
         // Initial load
         document.addEventListener('DOMContentLoaded', () => {
-            loadVersion();
-            loadConfig();
-            connectSSE();
-            setInterval(loadVerifyStatus, 30000);
-            refreshStats();  // 加载统计数据
+            checkSession();  // Check login status first
         });
 
         // Stats functions
@@ -1392,6 +1411,125 @@
             html += '</div>';
             container.innerHTML = html;
         }
+
+        // ========== Login Functions ==========
+        const SESSION_KEY = 'gcli2api-helper-session';
+
+        async function checkSession() {
+            const token = localStorage.getItem(SESSION_KEY);
+            if (!token) {
+                showLoginPage();
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/api/session?token=${encodeURIComponent(token)}`);
+                const data = await res.json();
+                if (data.valid) {
+                    hideLoginPage();
+                    initApp();
+                } else {
+                    localStorage.removeItem(SESSION_KEY);
+                    showLoginPage();
+                }
+            } catch (e) {
+                // Server might be down, show login page
+                showLoginPage();
+            }
+        }
+
+        function showLoginPage() {
+            document.getElementById('login-overlay').classList.remove('hidden');
+            document.getElementById('main-content').classList.add('hidden');
+        }
+
+        function hideLoginPage() {
+            document.getElementById('login-overlay').classList.add('hidden');
+            document.getElementById('main-content').classList.remove('hidden');
+        }
+
+        function initApp() {
+            loadVersion();
+            loadConfig();
+            connectSSE();
+            setInterval(loadVerifyStatus, 30000);
+            refreshStats();
+            lockConnectionConfig();
+        }
+
+        function lockConnectionConfig() {
+            const urlInput = document.getElementById('gcli-url');
+            const pwdInput = document.getElementById('gcli-password');
+            const connectBtn = document.getElementById('btn-connect');
+
+            if (urlInput) urlInput.disabled = true;
+            if (pwdInput) pwdInput.disabled = true;
+            if (connectBtn) connectBtn.style.display = 'none';
+        }
+
+        async function doLogin() {
+            const url = document.getElementById('login-url').value.trim();
+            const password = document.getElementById('login-password').value;
+            const errorEl = document.getElementById('login-error');
+            const btn = document.getElementById('btn-login');
+
+            if (!url) {
+                errorEl.textContent = '请输入 gcli2api 地址';
+                errorEl.classList.remove('hidden');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '登录中...';
+            errorEl.classList.add('hidden');
+
+            try {
+                const res = await fetch(`${API_BASE}/api/login`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({url, password})
+                });
+                const data = await res.json();
+
+                if (data.success && data.token) {
+                    localStorage.setItem(SESSION_KEY, data.token);
+                    hideLoginPage();
+                    initApp();
+                } else {
+                    errorEl.textContent = data.detail || '登录失败，请检查连接信息';
+                    errorEl.classList.remove('hidden');
+                }
+            } catch (e) {
+                errorEl.textContent = '连接失败: ' + e.message;
+                errorEl.classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '登录';
+            }
+        }
+
+        async function doLogout() {
+            if (!confirm('确定要退出登录吗？')) return;
+
+            try {
+                await fetch(`${API_BASE}/api/logout`, {method: 'POST'});
+            } catch (e) {
+                // Ignore errors
+            }
+
+            localStorage.removeItem(SESSION_KEY);
+            location.reload();
+        }
+
+        // Handle Enter key in login form
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const loginOverlay = document.getElementById('login-overlay');
+                if (loginOverlay && !loginOverlay.classList.contains('hidden')) {
+                    doLogin();
+                }
+            }
+        });
     </script>
 </body>
 </html>

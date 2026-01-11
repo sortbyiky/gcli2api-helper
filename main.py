@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import secrets
 import subprocess
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -23,6 +24,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 api_client: Optional[GcliApiClient] = None
+
+# Session token for login
+_session_token: Optional[str] = None
 
 # SSE clients management
 sse_clients: List[asyncio.Queue] = []
@@ -181,6 +185,39 @@ async def api_connect(req: ConnectRequest):
         return {"success": True, "message": "Connected"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/login")
+async def api_login(req: ConnectRequest):
+    """Login and establish connection, return session token"""
+    global _session_token
+    config.gcli_url = req.url
+    config.gcli_password = req.password
+    config.save()
+    try:
+        await connect_to_gcli()
+        _session_token = secrets.token_hex(32)
+        logger.info(f"User logged in, session created")
+        return {"success": True, "token": _session_token}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/api/session")
+async def api_check_session(token: str = ""):
+    """Check if session token is valid"""
+    if _session_token and token == _session_token:
+        return {"success": True, "valid": True, "connected": api_client is not None}
+    return {"success": True, "valid": False}
+
+
+@app.post("/api/logout")
+async def api_logout():
+    """Logout and clear session"""
+    global _session_token
+    _session_token = None
+    logger.info("User logged out")
+    return {"success": True}
 
 
 @app.get("/api/config")
