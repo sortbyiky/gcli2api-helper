@@ -70,15 +70,15 @@ class AutoVerifyService:
             await self._add_history({"type": "warning", "message": "未连接到 gcli2api"})
             return
 
-        # Get disabled credentials
-        disabled = await self._client.get_disabled_credentials()
-        if not disabled:
-            await self._add_history({"type": "info", "message": "检验完成，没有发现禁用的凭证"})
+        # Get all credentials (not just disabled)
+        all_creds = await self._client.get_all_credentials()
+        if not all_creds:
+            await self._add_history({"type": "info", "message": "检验完成，没有发现凭证"})
             return
 
-        # Filter by error codes
+        # Filter by error codes - check all credentials with matching error codes
         to_verify = []
-        for cred in disabled:
+        for cred in all_creds:
             cred_errors = cred.get("error_codes", [])
             if any(code in error_codes for code in cred_errors):
                 to_verify.append(cred)
@@ -86,7 +86,7 @@ class AutoVerifyService:
         if not to_verify:
             await self._add_history({
                 "type": "info",
-                "message": f"检验完成，{len(disabled)} 个禁用凭证，但无匹配错误码 {error_codes}"
+                "message": f"检验完成，{len(all_creds)} 个凭证，无匹配错误码 {error_codes}"
             })
             return
 
