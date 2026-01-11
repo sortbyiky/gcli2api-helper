@@ -1414,7 +1414,7 @@
             }
 
             if (currentLayout === 'compact') {
-                renderCompactLayout(container, data.data);
+                renderCompactLayoutPaginated(container, data.data);
             } else {
                 renderDetailLayoutPaginated(container, data.data);
             }
@@ -1475,48 +1475,12 @@
                 `;
             }).join('');
 
-            // Build pagination HTML using backend metadata
-            let paginationHtml = '';
-            if (totalPages > 1) {
-                const pageButtons = [];
-
-                pageButtons.push(`<button class="page-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>上一页</button>`);
-
-                const maxVisiblePages = 5;
-                let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-                let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-                if (endPage - startPage < maxVisiblePages - 1) {
-                    startPage = Math.max(1, endPage - maxVisiblePages + 1);
-                }
-
-                if (startPage > 1) {
-                    pageButtons.push(`<button class="page-btn" onclick="goToPage(1)">1</button>`);
-                    if (startPage > 2) pageButtons.push(`<span class="page-info">...</span>`);
-                }
-
-                for (let i = startPage; i <= endPage; i++) {
-                    pageButtons.push(`<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`);
-                }
-
-                if (endPage < totalPages) {
-                    if (endPage < totalPages - 1) pageButtons.push(`<span class="page-info">...</span>`);
-                    pageButtons.push(`<button class="page-btn" onclick="goToPage(${totalPages})">${totalPages}</button>`);
-                }
-
-                pageButtons.push(`<button class="page-btn" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>下一页</button>`);
-                pageButtons.push(`<span class="page-info">共 ${totalItems} 个凭证</span>`);
-
-                paginationHtml = `<div class="pagination">${pageButtons.join('')}</div>`;
-            } else if (totalItems > 0) {
-                paginationHtml = `<div class="pagination"><span class="page-info">共 ${totalItems} 个凭证</span></div>`;
-            }
-
             container.className = 'card-grid';
             container.innerHTML = cardsHtml;
 
             const paginationContainer = document.getElementById('quota-pagination');
             if (paginationContainer) {
-                paginationContainer.innerHTML = paginationHtml;
+                paginationContainer.innerHTML = buildPaginationHtml(totalItems, totalPages);
             }
         }
 
@@ -1565,13 +1529,8 @@
             updateModelFilterList();
         }
 
-        function renderCompactLayout(container, data) {
-            container.className = '';
-            // Clear pagination when in compact mode
-            const paginationContainer = document.getElementById('quota-pagination');
-            if (paginationContainer) paginationContainer.innerHTML = '';
-
-            container.innerHTML = `
+        function buildCompactTableHtml(data) {
+            return `
                 <table class="compact-table">
                     <thead>
                         <tr>
@@ -1614,6 +1573,72 @@
                     </tbody>
                 </table>
             `;
+        }
+
+        function buildPaginationHtml(totalItems, totalPages) {
+            if (totalPages <= 1) {
+                return totalItems > 0 ? `<div class="pagination"><span class="page-info">共 ${totalItems} 个凭证</span></div>` : '';
+            }
+
+            const pageButtons = [];
+            pageButtons.push(`<button class="page-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>上一页</button>`);
+
+            const maxVisiblePages = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+            if (endPage - startPage < maxVisiblePages - 1) {
+                startPage = Math.max(1, endPage - maxVisiblePages + 1);
+            }
+
+            if (startPage > 1) {
+                pageButtons.push(`<button class="page-btn" onclick="goToPage(1)">1</button>`);
+                if (startPage > 2) pageButtons.push(`<span class="page-info">...</span>`);
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                pageButtons.push(`<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`);
+            }
+
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) pageButtons.push(`<span class="page-info">...</span>`);
+                pageButtons.push(`<button class="page-btn" onclick="goToPage(${totalPages})">${totalPages}</button>`);
+            }
+
+            pageButtons.push(`<button class="page-btn" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>下一页</button>`);
+            pageButtons.push(`<span class="page-info">共 ${totalItems} 个凭证</span>`);
+
+            return `<div class="pagination">${pageButtons.join('')}</div>`;
+        }
+
+        function renderCompactLayoutPaginated(container, data) {
+            // Backend pagination mode - data is already the current page
+            container.className = '';
+            container.innerHTML = buildCompactTableHtml(data);
+
+            const paginationContainer = document.getElementById('quota-pagination');
+            if (paginationContainer) {
+                paginationContainer.innerHTML = buildPaginationHtml(quotaPagination.total, quotaPagination.totalPages);
+            }
+        }
+
+        function renderCompactLayout(container, data) {
+            // Frontend pagination mode - need to slice data
+            container.className = '';
+
+            const totalItems = data.length;
+            const totalPages = Math.ceil(totalItems / pageSize);
+            if (currentPage > totalPages) currentPage = totalPages || 1;
+
+            const startIdx = (currentPage - 1) * pageSize;
+            const endIdx = Math.min(startIdx + pageSize, totalItems);
+            const pageData = data.slice(startIdx, endIdx);
+
+            container.innerHTML = buildCompactTableHtml(pageData);
+
+            const paginationContainer = document.getElementById('quota-pagination');
+            if (paginationContainer) {
+                paginationContainer.innerHTML = buildPaginationHtml(totalItems, totalPages);
+            }
         }
 
         function renderDetailLayout(container, data) {
@@ -1675,54 +1700,12 @@
                 `;
             }).join('');
 
-            // Build pagination HTML
-            let paginationHtml = '';
-            if (totalPages > 1) {
-                const pageButtons = [];
-
-                // Previous button
-                pageButtons.push(`<button class="page-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>上一页</button>`);
-
-                // Page numbers
-                const maxVisiblePages = 5;
-                let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-                let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-                if (endPage - startPage < maxVisiblePages - 1) {
-                    startPage = Math.max(1, endPage - maxVisiblePages + 1);
-                }
-
-                if (startPage > 1) {
-                    pageButtons.push(`<button class="page-btn" onclick="goToPage(1)">1</button>`);
-                    if (startPage > 2) pageButtons.push(`<span class="page-info">...</span>`);
-                }
-
-                for (let i = startPage; i <= endPage; i++) {
-                    pageButtons.push(`<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`);
-                }
-
-                if (endPage < totalPages) {
-                    if (endPage < totalPages - 1) pageButtons.push(`<span class="page-info">...</span>`);
-                    pageButtons.push(`<button class="page-btn" onclick="goToPage(${totalPages})">${totalPages}</button>`);
-                }
-
-                // Next button
-                pageButtons.push(`<button class="page-btn" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>下一页</button>`);
-
-                // Page info
-                pageButtons.push(`<span class="page-info">共 ${totalItems} 个凭证</span>`);
-
-                paginationHtml = `<div class="pagination">${pageButtons.join('')}</div>`;
-            } else if (totalItems > 0) {
-                paginationHtml = `<div class="pagination"><span class="page-info">共 ${totalItems} 个凭证</span></div>`;
-            }
-
             container.className = 'card-grid';
             container.innerHTML = cardsHtml;
 
-            // Render pagination to separate container
             const paginationContainer = document.getElementById('quota-pagination');
             if (paginationContainer) {
-                paginationContainer.innerHTML = paginationHtml;
+                paginationContainer.innerHTML = buildPaginationHtml(totalItems, totalPages);
             }
         }
 
