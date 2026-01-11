@@ -1,4 +1,4 @@
-short_hash=610ed28
-full_hash=610ed285d6a1934deca8d282851754cece5c8527
-message=添加模型统计图表可视化和历史记录功能
-date=2026-01-11 17:50:32 +0800
+short_hash=05e0d44
+full_hash=05e0d44a3d34750d24734620dfb1da61c3c87e30
+message=优化模型统计加载和凭证查询并行化
+date=2026-01-11 18:19:13 +0800
