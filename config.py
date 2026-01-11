@@ -9,6 +9,7 @@ class Config:
     def __init__(self):
         self.gcli_url: str = "http://127.0.0.1:7861"
         self.gcli_password: str = ""
+        self.auto_connect: bool = True  # Auto connect on startup
         self.auto_verify_enabled: bool = False
         self.auto_verify_interval: int = 300  # seconds
         self.auto_verify_error_codes: List[int] = [403]  # Only 403 (permission issues), not 400 (client errors)
@@ -23,6 +24,7 @@ class Config:
                     data = json.load(f)
                 self.gcli_url = data.get("gcli_url", self.gcli_url)
                 self.gcli_password = data.get("gcli_password", self.gcli_password)
+                self.auto_connect = data.get("auto_connect", self.auto_connect)
                 self.auto_verify_enabled = data.get("auto_verify_enabled", self.auto_verify_enabled)
                 self.auto_verify_interval = data.get("auto_verify_interval", self.auto_verify_interval)
                 self.auto_verify_error_codes = data.get("auto_verify_error_codes", self.auto_verify_error_codes)
@@ -34,6 +36,7 @@ class Config:
         data = {
             "gcli_url": self.gcli_url,
             "gcli_password": self.gcli_password,
+            "auto_connect": self.auto_connect,
             "auto_verify_enabled": self.auto_verify_enabled,
             "auto_verify_interval": self.auto_verify_interval,
             "auto_verify_error_codes": self.auto_verify_error_codes,
@@ -46,6 +49,7 @@ class Config:
         return {
             "gcli_url": self.gcli_url,
             "gcli_password": self.gcli_password,
+            "auto_connect": self.auto_connect,
             "auto_verify_enabled": self.auto_verify_enabled,
             "auto_verify_interval": self.auto_verify_interval,
             "auto_verify_error_codes": self.auto_verify_error_codes,

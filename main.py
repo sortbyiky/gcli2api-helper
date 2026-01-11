@@ -99,12 +99,13 @@ log_forwarder.set_log_callback(broadcast_log)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("gcli2api-helper starting...")
-    # Try to connect if config exists
-    if config.gcli_url and config.gcli_password:
+    # Try to connect if auto_connect is enabled and config exists
+    if config.auto_connect and config.gcli_url and config.gcli_password:
         try:
             await connect_to_gcli()
+            logger.info("Auto-connected to gcli2api on startup")
         except Exception as e:
-            logger.warning(f"Failed to connect on startup: {e}")
+            logger.warning(f"Failed to auto-connect on startup: {e}")
     yield
     # Cleanup
     logger.info("gcli2api-helper shutting down...")
