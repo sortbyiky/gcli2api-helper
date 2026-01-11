@@ -578,16 +578,6 @@
                         <button onclick="triggerVerify()" id="btn-trigger-verify" class="btn btn-warning btn-sm">立即检验</button>
                     </div>
                 </div>
-                <!-- Verify Progress Bar -->
-                <div id="verify-progress-container" class="hidden mb-4">
-                    <div class="flex justify-between text-sm text-slate-600 mb-1">
-                        <span id="verify-progress-text">检验中...</span>
-                        <span id="verify-progress-percent">0%</span>
-                    </div>
-                    <div class="w-full bg-slate-200 rounded-full h-2.5">
-                        <div id="verify-progress-bar" class="bg-amber-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
-                    </div>
-                </div>
                 <div id="verify-status" class="text-sm text-slate-600 mb-4"></div>
                 <div id="verify-history" class="history-preview"></div>
             </div>
@@ -991,12 +981,6 @@
                 handleStatsData(data, true);
             });
 
-            // Handle verify progress updates
-            eventSource.addEventListener('verify_progress', (e) => {
-                const data = JSON.parse(e.data);
-                handleVerifyProgress(data);
-            });
-
             eventSource.addEventListener('log', (e) => {
                 const log = JSON.parse(e.data);
                 allLogs.unshift(log);
@@ -1089,39 +1073,6 @@
                 setTimeout(() => {
                     refreshBtn.textContent = originalText;
                     refreshBtn.style.backgroundColor = '';
-                }, 2000);
-            }
-        }
-
-        // Handle verify progress updates from SSE
-        function handleVerifyProgress(data) {
-            const container = document.getElementById('verify-progress-container');
-            const progressBar = document.getElementById('verify-progress-bar');
-            const progressText = document.getElementById('verify-progress-text');
-            const progressPercent = document.getElementById('verify-progress-percent');
-
-            if (!container || !progressBar) return;
-
-            const { completed, total, percent, filename, success } = data;
-
-            // Show progress container
-            container.classList.remove('hidden');
-
-            // Update progress bar
-            progressBar.style.width = `${percent}%`;
-            progressPercent.textContent = `${percent}%`;
-            progressText.textContent = `检验中: ${completed}/${total} - ${filename}`;
-
-            // Change color based on success
-            progressBar.className = success
-                ? 'bg-green-500 h-2.5 rounded-full transition-all duration-300'
-                : 'bg-amber-500 h-2.5 rounded-full transition-all duration-300';
-
-            // Hide progress bar when complete
-            if (completed >= total) {
-                setTimeout(() => {
-                    container.classList.add('hidden');
-                    progressBar.style.width = '0%';
                 }, 2000);
             }
         }
@@ -1283,18 +1234,6 @@
 
         async function triggerVerify() {
             setLoading('btn-trigger-verify', true);
-            // Show progress bar at start
-            const container = document.getElementById('verify-progress-container');
-            const progressBar = document.getElementById('verify-progress-bar');
-            const progressText = document.getElementById('verify-progress-text');
-            const progressPercent = document.getElementById('verify-progress-percent');
-            if (container) {
-                container.classList.remove('hidden');
-                progressBar.style.width = '0%';
-                progressBar.className = 'bg-amber-500 h-2.5 rounded-full transition-all duration-300';
-                progressText.textContent = '检验中...';
-                progressPercent.textContent = '0%';
-            }
             try {
                 const data = await api('/api/verify/trigger', { method: 'POST' });
                 if (data.success) {
@@ -1309,12 +1248,6 @@
                 alert('检验失败: ' + e.message);
             } finally {
                 setLoading('btn-trigger-verify', false);
-                // Hide progress bar
-                if (container) {
-                    setTimeout(() => {
-                        container.classList.add('hidden');
-                    }, 2000);
-                }
             }
         }
 
