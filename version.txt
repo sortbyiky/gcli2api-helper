@@ -1,4 +1,4 @@
-short_hash=d163966
-full_hash=d1639660cd99b153713906bf9d8e48068b837c75
-message=实现凭证监控 SSE 推送更新机制
-date=2026-01-11 16:55:06 +0800
+short_hash=610ed28
+full_hash=610ed285d6a1934deca8d282851754cece5c8527
+message=添加模型统计图表可视化和历史记录功能
+date=2026-01-11 17:50:32 +0800
