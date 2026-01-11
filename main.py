@@ -107,17 +107,38 @@ async def broadcast_quota(quota_data: dict):
             pass
 
 
+async def broadcast_stats(stats_data: dict):
+    """Broadcast stats update to all SSE clients"""
+    for queue in sse_clients:
+        try:
+            await queue.put({"type": "stats", "data": stats_data})
+        except Exception:
+            pass
+
+
 async def quota_refresh_loop():
-    """Background task to refresh quota data every minute and push to clients"""
+    """Background task to refresh quota and stats data every minute and push to clients"""
     while True:
         await asyncio.sleep(60)  # Wait 1 minute
         if api_client and sse_clients:
+            # Push quota data
             try:
                 data = await quota_monitor_service.get_all_quotas(force_refresh=True)
                 await broadcast_quota(data)
                 logger.debug("Quota data refreshed and pushed to clients")
             except Exception as e:
                 logger.warning(f"Failed to refresh quota: {e}")
+
+            # Push stats data
+            try:
+                stats_data = {
+                    "success": True,
+                    "stats": log_forwarder.get_stats(),
+                }
+                await broadcast_stats(stats_data)
+                logger.debug("Stats data pushed to clients")
+            except Exception as e:
+                logger.warning(f"Failed to push stats: {e}")
 
 
 # Set SSE callback for auto_verify_service and log_forwarder
@@ -340,6 +361,19 @@ async def api_logs_stream(request: Request):
                     }
                 except Exception as e:
                     logger.debug(f"Failed to send initial quota: {e}")
+
+            # Send initial stats data
+            try:
+                stats_data = {
+                    "success": True,
+                    "stats": log_forwarder.get_stats(),
+                }
+                yield {
+                    "event": "stats_init",
+                    "data": json.dumps(stats_data)
+                }
+            except Exception as e:
+                logger.debug(f"Failed to send initial stats: {e}")
             while True:
                 if await request.is_disconnected():
                     break
@@ -355,6 +389,11 @@ async def api_logs_stream(request: Request):
                         elif msg["type"] == "quota":
                             yield {
                                 "event": "quota_update",
+                                "data": json.dumps(msg["data"])
+                            }
+                        elif msg["type"] == "stats":
+                            yield {
+                                "event": "stats_update",
                                 "data": json.dumps(msg["data"])
                             }
                     else:

@@ -1,8 +1,12 @@
+import asyncio
 import httpx
 from typing import Any, Dict, List, Optional
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Default max concurrent requests for parallel operations
+DEFAULT_MAX_CONCURRENT = 20
 
 
 class GcliApiClient:
@@ -76,37 +80,56 @@ class GcliApiClient:
         resp.raise_for_status()
         return resp.json()
 
-    async def get_all_quotas(self) -> List[Dict[str, Any]]:
-        """Get quotas for all credentials"""
+    async def get_all_quotas(self, max_concurrent: int = DEFAULT_MAX_CONCURRENT) -> List[Dict[str, Any]]:
+        """Get quotas for all credentials (parallel execution)"""
         creds = await self.get_credentials(mode="antigravity")
         items = creds.get("items", [])
-        results = []
-        for item in items:
+
+        if not items:
+            return []
+
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def fetch_quota(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             filename = item.get("filename")
             if not filename:
-                continue
-            try:
-                quota = await self.get_credential_quota(filename)
-                results.append({
-                    "filename": filename,
-                    "user_email": item.get("user_email", ""),
-                    "disabled": item.get("disabled", False),
-                    "quota": quota,
-                })
-            except Exception as e:
-                logger.warning(f"Failed to get quota for {filename}: {e}")
-                results.append({
-                    "filename": filename,
-                    "user_email": item.get("user_email", ""),
-                    "disabled": item.get("disabled", False),
-                    "quota": {"success": False, "error": str(e)},
-                })
-        return results
+                return None
+            async with semaphore:
+                try:
+                    quota = await self.get_credential_quota(filename)
+                    return {
+                        "filename": filename,
+                        "user_email": item.get("user_email", ""),
+                        "disabled": item.get("disabled", False),
+                        "quota": quota,
+                    }
+                except Exception as e:
+                    logger.warning(f"Failed to get quota for {filename}: {e}")
+                    return {
+                        "filename": filename,
+                        "user_email": item.get("user_email", ""),
+                        "disabled": item.get("disabled", False),
+                        "quota": {"success": False, "error": str(e)},
+                    }
+
+        # Execute all quota fetches in parallel
+        tasks = [fetch_quota(item) for item in items]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Filter out None and exceptions, preserve order
+        valid_results = []
+        for r in results:
+            if r is not None and not isinstance(r, Exception):
+                valid_results.append(r)
+            elif isinstance(r, Exception):
+                logger.warning(f"Task exception: {r}")
+
+        return valid_results
 
     async def get_quotas_paginated(
-        self, page: int = 1, page_size: int = 9
+        self, page: int = 1, page_size: int = 9, max_concurrent: int = DEFAULT_MAX_CONCURRENT
     ) -> Dict[str, Any]:
-        """Get quotas with pagination support"""
+        """Get quotas with pagination support (parallel execution)"""
         creds = await self.get_credentials(mode="antigravity")
         items = creds.get("items", [])
         total = len(items)
@@ -117,30 +140,53 @@ class GcliApiClient:
         end_idx = min(start_idx + page_size, total)
         page_items = items[start_idx:end_idx]
 
-        results = []
-        for item in page_items:
+        if not page_items:
+            return {
+                "items": [],
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+            }
+
+        semaphore = asyncio.Semaphore(max_concurrent)
+
+        async def fetch_quota(item: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             filename = item.get("filename")
             if not filename:
-                continue
-            try:
-                quota = await self.get_credential_quota(filename)
-                results.append({
-                    "filename": filename,
-                    "user_email": item.get("user_email", ""),
-                    "disabled": item.get("disabled", False),
-                    "quota": quota,
-                })
-            except Exception as e:
-                logger.warning(f"Failed to get quota for {filename}: {e}")
-                results.append({
-                    "filename": filename,
-                    "user_email": item.get("user_email", ""),
-                    "disabled": item.get("disabled", False),
-                    "quota": {"success": False, "error": str(e)},
-                })
+                return None
+            async with semaphore:
+                try:
+                    quota = await self.get_credential_quota(filename)
+                    return {
+                        "filename": filename,
+                        "user_email": item.get("user_email", ""),
+                        "disabled": item.get("disabled", False),
+                        "quota": quota,
+                    }
+                except Exception as e:
+                    logger.warning(f"Failed to get quota for {filename}: {e}")
+                    return {
+                        "filename": filename,
+                        "user_email": item.get("user_email", ""),
+                        "disabled": item.get("disabled", False),
+                        "quota": {"success": False, "error": str(e)},
+                    }
+
+        # Execute all quota fetches in parallel
+        tasks = [fetch_quota(item) for item in page_items]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Filter out None and exceptions
+        valid_results = []
+        for r in results:
+            if r is not None and not isinstance(r, Exception):
+                valid_results.append(r)
+            elif isinstance(r, Exception):
+                logger.warning(f"Task exception: {r}")
 
         return {
-            "items": results,
+            "items": valid_results,
             "total": total,
             "page": page,
             "page_size": page_size,

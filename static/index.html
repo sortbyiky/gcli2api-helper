@@ -717,6 +717,7 @@
         let filteredLogs = [];
         let eventSource = null;
         let quotaData = null;
+        let statsData = null;  // Cache for stats data
 
         // Pagination state
         let currentPage = 1;
@@ -968,6 +969,18 @@
                 handleQuotaData(data, true);
             });
 
+            // Handle initial stats data on SSE connect
+            eventSource.addEventListener('stats_init', (e) => {
+                const data = JSON.parse(e.data);
+                handleStatsData(data, false);
+            });
+
+            // Handle stats updates pushed from server (every 60s)
+            eventSource.addEventListener('stats_update', (e) => {
+                const data = JSON.parse(e.data);
+                handleStatsData(data, true);
+            });
+
             eventSource.addEventListener('log', (e) => {
                 const log = JSON.parse(e.data);
                 allLogs.unshift(log);
@@ -1030,6 +1043,40 @@
             }
         }
 
+        // Handle stats data from SSE (init or update)
+        function handleStatsData(data, isUpdate) {
+            if (!data || !data.success) return;
+
+            // Store stats data in cache
+            statsData = data;
+
+            // Re-render if on stats tab
+            const statsPanel = document.getElementById('panel-stats');
+            if (statsPanel && !statsPanel.classList.contains('hidden')) {
+                renderStats(data.stats);
+            }
+
+            // Show update indicator if it's a push update
+            if (isUpdate) {
+                showStatsUpdateIndicator();
+            }
+        }
+
+        // Show a brief indicator when stats data is updated
+        function showStatsUpdateIndicator() {
+            // Find the stats refresh button and briefly change its style
+            const refreshBtn = document.querySelector('#panel-stats .btn-primary');
+            if (refreshBtn) {
+                const originalText = refreshBtn.textContent;
+                refreshBtn.textContent = '已更新';
+                refreshBtn.style.backgroundColor = '#22c55e';
+                setTimeout(() => {
+                    refreshBtn.textContent = originalText;
+                    refreshBtn.style.backgroundColor = '';
+                }, 2000);
+            }
+        }
+
         function updateSSEStatus(status) {
             const dot = document.getElementById('sse-dot');
             const text = document.getElementById('sse-text');
@@ -1065,7 +1112,11 @@
                 }
                 // Data will be loaded via SSE (quota_init/quota_update events)
             } else if (tab === 'stats') {
-                refreshStats();
+                // Stats tab: use cached data from SSE, just re-render if data exists
+                if (statsData && statsData.stats) {
+                    renderStats(statsData.stats);
+                }
+                // Data will be loaded via SSE (stats_init/stats_update events)
             }
             // logs tab uses SSE for real-time updates, no refresh needed
         }
@@ -2151,9 +2202,9 @@
         function initApp() {
             loadVersion();
             loadConfig();
-            connectSSE();
+            connectSSE();  // SSE will push quota_init and stats_init on connect
             setInterval(loadVerifyStatus, 30000);
-            refreshStats();
+            // Stats data will be loaded via SSE (stats_init event), no need to call refreshStats() here
             lockConnectionConfig();
         }
 
