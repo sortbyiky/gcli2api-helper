@@ -848,10 +848,13 @@
                 return;
             }
 
-            container.innerHTML = filteredLogs.map(log => {
+            // Reverse to show oldest first (newest at bottom for auto-scroll)
+            const logsToShow = [...filteredLogs].reverse();
+
+            container.innerHTML = logsToShow.map(log => {
                 const type = log.type || 'verify';
 
-                // For gcli2api logs, display the raw message directly
+                // For gcli2api logs, display the raw message directly (like original project)
                 if (type === 'gcli2api' && log.message) {
                     const msg = log.message;
                     let statusClass = 'log-gcli2api';
@@ -865,24 +868,46 @@
                         statusClass = 'log-info';
                     }
 
-                    // Highlight specific patterns
+                    // Highlight specific patterns (matching original project format)
                     let formattedMsg = msg
+                        // Timestamp: [2026-01-11 13:01:14]
+                        .replace(/\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]/g, '<span class="text-slate-400">[$1]</span>')
+                        // Log levels
                         .replace(/\[INFO\]/g, '<span class="text-blue-400">[INFO]</span>')
                         .replace(/\[WARNING\]/g, '<span class="text-yellow-400">[WARNING]</span>')
                         .replace(/\[ERROR\]/g, '<span class="text-red-400">[ERROR]</span>')
+                        // Service tags
                         .replace(/\[ANTHROPIC\]/g, '<span class="text-purple-400">[ANTHROPIC]</span>')
+                        .replace(/\[ANTHROPIC\]\[([^\]]+)\]/g, '<span class="text-purple-400">[ANTHROPIC]</span><span class="text-purple-300">[$1]</span>')
                         .replace(/\[ANTIGRAVITY[^\]]*\]/g, '<span class="text-green-400">$&</span>')
                         .replace(/\[GEMINICLI[^\]]*\]/g, '<span class="text-cyan-400">$&</span>')
+                        .replace(/\[loadCodeAssist\]/g, '<span class="text-orange-400">[loadCodeAssist]</span>')
+                        // Token counts
                         .replace(/input_tokens=(\d+)/g, 'input_tokens=<span class="text-emerald-400">$1</span>')
                         .replace(/output_tokens=(\d+)/g, 'output_tokens=<span class="text-amber-400">$1</span>')
+                        // Model names
                         .replace(/模型: ([^\s,]+)/g, '模型: <span class="text-pink-400">$1</span>')
-                        .replace(/status=(\d+)/g, 'status=<span class="text-red-400">$1</span>');
+                        // Status codes
+                        .replace(/status=(\d+)/g, 'status=<span class="text-red-400">$1</span>')
+                        .replace(/\(status=(\d+)\)/g, '(status=<span class="text-red-400">$1</span>)')
+                        // Credential filenames
+                        .replace(/凭证: ([^\s,]+\.json)/g, '凭证: <span class="text-sky-400">$1</span>')
+                        // Project IDs
+                        .replace(/Project ID: ([^\s-]+)/g, 'Project ID: <span class="text-indigo-400">$1</span>');
 
                     return `<div class="${statusClass}">${formattedMsg}</div>`;
                 }
 
-                // For other logs (verify, helper, etc.)
-                const time = new Date(log.timestamp).toLocaleString();
+                // For other logs (verify, helper, etc.) - format like original project
+                // Format timestamp to match original: [2026-01-11 13:01:14]
+                const date = new Date(log.timestamp);
+                const formattedTime = date.getFullYear() + '-' +
+                    String(date.getMonth() + 1).padStart(2, '0') + '-' +
+                    String(date.getDate()).padStart(2, '0') + ' ' +
+                    String(date.getHours()).padStart(2, '0') + ':' +
+                    String(date.getMinutes()).padStart(2, '0') + ':' +
+                    String(date.getSeconds()).padStart(2, '0');
+
                 let statusClass = 'log-info';
                 let statusText = 'INFO';
 
@@ -905,9 +930,18 @@
 
                 const filename = log.filename || '';
                 const message = log.message || '';
-                const source = log.source ? `[${log.source}]` : '';
 
-                return `<div class="${statusClass}">[${time}] [${statusText}] ${source} ${filename} ${message ? '- ' + message : ''}</div>`;
+                // Format like original project: [timestamp] [LEVEL] message
+                let logContent = `<span class="text-slate-400">[${formattedTime}]</span> `;
+                logContent += `<span class="${statusClass === 'log-error' ? 'text-red-400' : statusClass === 'log-warning' ? 'text-yellow-400' : statusClass === 'log-success' ? 'text-green-400' : 'text-blue-400'}">[${statusText}]</span> `;
+                if (filename) {
+                    logContent += `<span class="text-sky-400">${filename}</span> `;
+                }
+                if (message) {
+                    logContent += `${filename ? '- ' : ''}${message}`;
+                }
+
+                return `<div class="${statusClass}">${logContent}</div>`;
             }).join('\n');
 
             if (document.getElementById('log-auto-scroll').checked) {
