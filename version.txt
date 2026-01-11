@@ -1,4 +1,4 @@
-short_hash=b79cdf8
-full_hash=b79cdf888412ee4a793f880b88e4f5a7026ea188
-message=为简洁模式添加分页支持并重构分页代码
-date=2026-01-11 16:25:18 +0800
+short_hash=e591ab1
+full_hash=e591ab1a18352dffe1cf64929adb760cf55d9d7a
+message=修复切换布局时分页消失的问题
+date=2026-01-11 16:39:12 +0800
