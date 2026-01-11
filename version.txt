@@ -1,4 +1,4 @@
-short_hash=ffebf29
-full_hash=ffebf29508da6d02b059e5d85656076bc20206a3
-message=添加模型额度刷新时间显示
-date=2026-01-12 04:35:40 +0800
+short_hash=9f9c5b3
+full_hash=9f9c5b34abcb8eef65b7e431c96f7f7246b886c1
+message=优化刷新时间显示格式，改为 MM-DD HH:mm 格式
+date=2026-01-12 04:41:53 +0800
