@@ -128,5 +128,9 @@ class LogForwarder:
         """重置统计数据"""
         self._stats.reset()
 
+    def get_stats_history(self, period: str = "hourly", limit: int = 24) -> Dict[str, Any]:
+        """获取历史统计数据"""
+        return self._stats.get_history(period, limit)
+
 
 log_forwarder = LogForwarder()

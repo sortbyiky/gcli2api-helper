@@ -459,6 +459,27 @@ async def api_reset_stats():
     return {"success": True, "message": "Stats reset"}
 
 
+@app.get("/api/stats/history")
+async def api_get_stats_history(period: str = "hourly", limit: int = 24):
+    """获取历史统计数据
+
+    Args:
+        period: "hourly" or "daily"
+        limit: max records to return (default 24)
+    """
+    if period not in ["hourly", "daily"]:
+        period = "hourly"
+    if limit < 1:
+        limit = 24
+    if limit > 100:
+        limit = 100
+
+    return {
+        "success": True,
+        "history": log_forwarder.get_stats_history(period, limit),
+    }
+
+
 @app.get("/api/version")
 async def api_version(check_update: bool = False):
     """Get version info and optionally check for updates"""

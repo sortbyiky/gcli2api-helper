@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>gcli2api-helper</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -640,6 +641,40 @@
                 </div>
                 <div id="stats-container">
                     <div class="text-center text-slate-500 py-8">暂无统计数据</div>
+                </div>
+
+                <!-- Charts Section -->
+                <div id="charts-section" class="mt-6 hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                        <!-- Calls Distribution Pie Chart -->
+                        <div class="bg-slate-50 rounded-lg p-4">
+                            <h3 class="text-sm font-semibold text-slate-700 mb-3">调用分布</h3>
+                            <div class="relative" style="height: 220px;">
+                                <canvas id="chart-calls-pie"></canvas>
+                            </div>
+                        </div>
+                        <!-- Token Consumption Bar Chart -->
+                        <div class="bg-slate-50 rounded-lg p-4">
+                            <h3 class="text-sm font-semibold text-slate-700 mb-3">Token 消耗</h3>
+                            <div class="relative" style="height: 220px;">
+                                <canvas id="chart-tokens-bar"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Trend Chart -->
+                    <div class="bg-slate-50 rounded-lg p-4">
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="text-sm font-semibold text-slate-700">调用趋势</h3>
+                            <select id="trend-period" onchange="loadStatsHistory()" class="text-sm border border-slate-300 rounded px-2 py-1">
+                                <option value="hourly">按小时</option>
+                                <option value="daily">按天</option>
+                            </select>
+                        </div>
+                        <div class="relative" style="height: 200px;">
+                            <canvas id="chart-trend"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1865,6 +1900,216 @@
 
             html += '</div>';
             container.innerHTML = html;
+
+            // Render charts
+            renderCharts(stats);
+            loadStatsHistory();
+        }
+
+        // ========== Charts ==========
+        let chartCallsPie = null;
+        let chartTokensBar = null;
+        let chartTrend = null;
+
+        const CHART_COLORS = [
+            '#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6',
+            '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1'
+        ];
+
+        function renderCharts(stats) {
+            if (!stats || !stats.models || Object.keys(stats.models).length === 0) {
+                document.getElementById('charts-section').classList.add('hidden');
+                return;
+            }
+
+            document.getElementById('charts-section').classList.remove('hidden');
+
+            const models = stats.models;
+            const modelNames = Object.keys(models);
+            const callsData = modelNames.map(m => models[m].calls);
+            const tokensData = modelNames.map(m => models[m].tokens);
+
+            // Destroy existing charts
+            if (chartCallsPie) chartCallsPie.destroy();
+            if (chartTokensBar) chartTokensBar.destroy();
+
+            // Calls Distribution Pie Chart
+            const ctxPie = document.getElementById('chart-calls-pie').getContext('2d');
+            chartCallsPie = new Chart(ctxPie, {
+                type: 'doughnut',
+                data: {
+                    labels: modelNames,
+                    datasets: [{
+                        data: callsData,
+                        backgroundColor: CHART_COLORS.slice(0, modelNames.length),
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                boxWidth: 12,
+                                font: { size: 11 },
+                                generateLabels: function(chart) {
+                                    const data = chart.data;
+                                    return data.labels.map((label, i) => {
+                                        const shortLabel = label.length > 15 ? label.substring(0, 15) + '...' : label;
+                                        return {
+                                            text: shortLabel,
+                                            fillStyle: data.datasets[0].backgroundColor[i],
+                                            hidden: false,
+                                            index: i
+                                        };
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Token Consumption Bar Chart
+            const ctxBar = document.getElementById('chart-tokens-bar').getContext('2d');
+            chartTokensBar = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: modelNames.map(n => n.length > 12 ? n.substring(0, 12) + '...' : n),
+                    datasets: [{
+                        label: 'Token 消耗',
+                        data: tokensData,
+                        backgroundColor: CHART_COLORS.slice(0, modelNames.length),
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return formatTokens(value);
+                                }
+                            }
+                        },
+                        x: {
+                            ticks: { font: { size: 10 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        async function loadStatsHistory() {
+            try {
+                const period = document.getElementById('trend-period').value;
+                const res = await fetch(`${API_BASE}/api/stats/history?period=${period}&limit=24`);
+                const data = await res.json();
+                if (data.success && data.history) {
+                    renderTrendChart(data.history);
+                }
+            } catch (err) {
+                console.error('Failed to load stats history:', err);
+            }
+        }
+
+        function renderTrendChart(history) {
+            const records = history.records || [];
+            if (records.length === 0) {
+                return;
+            }
+
+            // Destroy existing chart
+            if (chartTrend) chartTrend.destroy();
+
+            const period = history.period;
+            const labels = records.map(r => {
+                if (period === 'daily') {
+                    return r.date ? r.date.substring(5) : '';  // MM-DD
+                } else {
+                    // hourly: extract HH:00
+                    if (r.timestamp) {
+                        const d = new Date(r.timestamp);
+                        return d.getHours().toString().padStart(2, '0') + ':00';
+                    }
+                    return '';
+                }
+            });
+
+            const callsData = records.map(r => r.total_calls || 0);
+            const tokensData = records.map(r => r.total_tokens || 0);
+
+            const ctxTrend = document.getElementById('chart-trend').getContext('2d');
+            chartTrend = new Chart(ctxTrend, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '调用次数',
+                            data: callsData,
+                            borderColor: '#3B82F6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: 'Token 消耗',
+                            data: tokensData,
+                            borderColor: '#22C55E',
+                            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: { boxWidth: 12, font: { size: 11 } }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: { display: true, text: '调用次数', font: { size: 10 } },
+                            beginAtZero: true
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: { display: true, text: 'Token', font: { size: 10 } },
+                            beginAtZero: true,
+                            grid: { drawOnChartArea: false },
+                            ticks: {
+                                callback: function(value) {
+                                    return formatTokens(value);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         }
 
         // ========== Login Functions ==========
