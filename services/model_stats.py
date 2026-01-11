@@ -23,12 +23,18 @@ class ModelStatsService:
         self._total_calls = 0
         self._total_tokens = 0
         self._start_time = datetime.now()
+        self._current_model = None  # Track current model for correlation
 
-        # Regex pattern to extract model and token info from logs
-        # Example: "Model: gemini-2.0-flash-exp | Input: 1000 | Output: 500 | Total: 1500"
-        self._pattern = re.compile(
-            r"Model:\s*([^\s|]+)\s*\|.*?Total:\s*(\d+)",
-            re.IGNORECASE
+        # Pattern to extract model from stream start log
+        # Example: [ANTIGRAVITY STREAM] 开始接收流式响应，模型: claude-opus-4-5-thinking
+        self._model_pattern = re.compile(
+            r"开始接收流式响应，模型:\s*([^\s,]+)"
+        )
+
+        # Pattern to extract tokens from stream_end log
+        # Example: input_tokens=1011, output_tokens=5
+        self._token_pattern = re.compile(
+            r"input_tokens=(\d+),\s*output_tokens=(\d+)"
         )
 
         # Load saved stats on init
@@ -76,10 +82,22 @@ class ModelStatsService:
     def parse_log(self, log_line: str):
         """Parse a log line and extract model usage statistics"""
         try:
-            match = self._pattern.search(log_line)
-            if match:
-                model_name = match.group(1).strip()
-                total_tokens = int(match.group(2))
+            # 1. Check for model start log (开始接收流式响应)
+            model_match = self._model_pattern.search(log_line)
+            if model_match:
+                self._current_model = model_match.group(1).strip()
+                logger.debug(f"Detected model: {self._current_model}")
+                return
+
+            # 2. Check for stream_end log with token info
+            token_match = self._token_pattern.search(log_line)
+            if token_match:
+                input_tokens = int(token_match.group(1))
+                output_tokens = int(token_match.group(2))
+                total_tokens = input_tokens + output_tokens
+
+                # Use current model or fallback to "unknown"
+                model_name = self._current_model or "unknown"
 
                 # Update model stats
                 self._stats[model_name]["calls"] += 1
@@ -92,7 +110,7 @@ class ModelStatsService:
                 # Save to file
                 self._save()
 
-                logger.debug(f"Parsed: {model_name} - {total_tokens} tokens")
+                logger.debug(f"Parsed: {model_name} - {total_tokens} tokens (in={input_tokens}, out={output_tokens})")
         except Exception as e:
             logger.debug(f"Failed to parse log line: {e}")
 
