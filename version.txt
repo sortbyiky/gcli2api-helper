@@ -1,4 +1,4 @@
-short_hash=097f61a
-full_hash=097f61af8c69ed9828fa07e28ba71d569955514a
-message=修复版本显示和 Loading 居中问题
-date=2026-01-11 15:17:51 +0800
+short_hash=371b5bd
+full_hash=371b5bdf7396f4f8a41ab6e911c442f74c363352
+message=更新 README 文档，添加所有新功能说明
+date=2026-01-11 15:22:52 +0800
