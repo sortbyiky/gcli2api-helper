@@ -116,6 +116,22 @@ async def broadcast_stats(stats_data: dict):
             pass
 
 
+async def broadcast_verify_progress(completed: int, total: int, filename: str, success: bool):
+    """Broadcast verify progress to all SSE clients"""
+    progress_data = {
+        "completed": completed,
+        "total": total,
+        "percent": int(completed / total * 100) if total > 0 else 0,
+        "filename": filename,
+        "success": success,
+    }
+    for queue in sse_clients:
+        try:
+            await queue.put({"type": "verify_progress", "data": progress_data})
+        except Exception:
+            pass
+
+
 async def quota_refresh_loop():
     """Background task to refresh quota and stats data every minute and push to clients"""
     while True:
@@ -143,6 +159,7 @@ async def quota_refresh_loop():
 
 # Set SSE callback for auto_verify_service and log_forwarder
 auto_verify_service.set_log_callback(broadcast_log)
+auto_verify_service.set_progress_callback(broadcast_verify_progress)
 log_forwarder.set_log_callback(broadcast_log)
 
 

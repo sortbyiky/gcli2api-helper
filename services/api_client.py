@@ -1,6 +1,6 @@
 import asyncio
 import httpx
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -71,6 +71,59 @@ class GcliApiClient:
         resp = await self.client.post(url, params=params, headers=self._headers())
         resp.raise_for_status()
         return resp.json()
+
+    async def verify_credentials_batch(
+        self,
+        credentials: List[Dict[str, Any]],
+        max_concurrent: int = DEFAULT_MAX_CONCURRENT,
+        progress_callback: Optional[Callable] = None,
+        mode: str = "antigravity",
+    ) -> List[Dict[str, Any]]:
+        """Verify multiple credentials in parallel with progress callback"""
+        if not credentials:
+            return []
+
+        semaphore = asyncio.Semaphore(max_concurrent)
+        completed = 0
+        total = len(credentials)
+
+        async def verify_one(cred: Dict[str, Any]) -> Dict[str, Any]:
+            nonlocal completed
+            filename = cred.get("filename", "")
+            async with semaphore:
+                try:
+                    result = await self.verify_credential(filename, mode)
+                    success = True
+                except Exception as e:
+                    logger.warning(f"Failed to verify {filename}: {e}")
+                    result = {"success": False, "error": str(e)}
+                    success = False
+
+                completed += 1
+                if progress_callback:
+                    try:
+                        await progress_callback(completed, total, filename, success)
+                    except Exception as cb_err:
+                        logger.warning(f"Progress callback error: {cb_err}")
+
+                return {
+                    "filename": filename,
+                    "result": result,
+                    "success": success,
+                }
+
+        tasks = [verify_one(c) for c in credentials]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Filter out exceptions
+        valid_results = []
+        for r in results:
+            if isinstance(r, Exception):
+                logger.warning(f"Task exception: {r}")
+            else:
+                valid_results.append(r)
+
+        return valid_results
 
     async def get_credential_quota(self, filename: str) -> Dict[str, Any]:
         """Get quota for a credential (antigravity mode only)"""

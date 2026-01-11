@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .api_client import GcliApiClient
 
@@ -16,10 +16,15 @@ class AutoVerifyService:
         self._history: List[Dict[str, Any]] = []
         self._max_history = 100
         self._on_new_log = None  # SSE callback
+        self._on_progress = None  # Progress callback for SSE
 
     def set_log_callback(self, callback):
         """Set callback for new log entries (for SSE)"""
         self._on_new_log = callback
+
+    def set_progress_callback(self, callback: Optional[Callable]):
+        """Set callback for verify progress (for SSE)"""
+        self._on_progress = callback
 
     @property
     def is_running(self) -> bool:
@@ -93,56 +98,45 @@ class AutoVerifyService:
         logger.info(f"Found {len(to_verify)} credentials to verify")
         await self._add_history({
             "type": "info",
-            "message": f"发现 {len(to_verify)} 个需要恢复的凭证"
+            "message": f"发现 {len(to_verify)} 个需要恢复的凭证，开始并行检验..."
         })
 
-        # Verify each credential
+        # Use parallel verification with progress callback
+        async def progress_callback(completed: int, total: int, filename: str, success: bool):
+            if self._on_progress:
+                await self._on_progress(completed, total, filename, success)
+
+        results = await self._client.verify_credentials_batch(
+            to_verify,
+            progress_callback=progress_callback
+        )
+
+        # Process results and add to history
         success_count = 0
         fail_count = 0
-        for cred in to_verify:
-            filename = cred.get("filename")
-            if not filename:
-                continue
-            old_errors = cred.get("error_codes", [])
-            user_email = cred.get("user_email", "")
+        for item in results:
+            filename = item.get("filename", "")
+            success = item.get("success", False)
+            result = item.get("result", {})
+            message = result.get("message", "")
 
-            # Log before restore
-            await self._add_history({
-                "type": "info",
-                "message": f"正在恢复 {filename}，错误码: {old_errors}"
-            })
-
-            try:
-                result = await self._client.verify_credential(filename)
-                success = result.get("success", False)
-                message = result.get("message", "")
-
-                if success:
-                    success_count += 1
-                    await self._add_history({
-                        "type": "verify",
-                        "filename": filename,
-                        "success": True,
-                        "message": f"恢复成功 - {message}" if message else "恢复成功，凭证已启用",
-                    })
-                else:
-                    fail_count += 1
-                    await self._add_history({
-                        "type": "verify",
-                        "filename": filename,
-                        "success": False,
-                        "message": f"恢复失败 - {message}" if message else "恢复失败",
-                    })
-                logger.info(f"Verified {filename}: success={success}")
-            except Exception as e:
+            if success:
+                success_count += 1
+                await self._add_history({
+                    "type": "verify",
+                    "filename": filename,
+                    "success": True,
+                    "message": f"恢复成功 - {message}" if message else "恢复成功，凭证已启用",
+                })
+            else:
                 fail_count += 1
+                error_msg = result.get("error", message)
                 await self._add_history({
                     "type": "verify",
                     "filename": filename,
                     "success": False,
-                    "message": f"恢复异常: {str(e)}",
+                    "message": f"恢复失败 - {error_msg}" if error_msg else "恢复失败",
                 })
-                logger.warning(f"Failed to verify {filename}: {e}")
 
         # Summary log
         await self._add_history({
@@ -151,37 +145,62 @@ class AutoVerifyService:
         })
 
     async def trigger_now(self, error_codes: List[int] = None) -> Dict[str, Any]:
-        """Manually trigger verification for all credentials"""
+        """Manually trigger verification for all credentials (parallel execution)"""
         if not self._client:
             return {"success": False, "message": "Not connected"}
 
-        results = []
         # Get all credentials (not just disabled)
         all_creds = await self._client.get_all_credentials()
+        if not all_creds:
+            return {"success": True, "total": 0, "verified": 0, "results": []}
 
-        for cred in all_creds:
-            filename = cred.get("filename")
-            if not filename:
-                continue
-            try:
-                result = await self._client.verify_credential(filename)
-                results.append({
-                    "filename": filename,
-                    "success": result.get("success", False),
-                    "message": result.get("message", ""),
-                })
-                await self._add_history({
-                    "type": "verify",
-                    "filename": filename,
-                    "success": result.get("success", False),
-                    "message": result.get("message", ""),
-                })
-            except Exception as e:
-                results.append({
-                    "filename": filename,
-                    "success": False,
-                    "message": str(e),
-                })
+        await self._add_history({
+            "type": "info",
+            "message": f"开始立即检验，共 {len(all_creds)} 个凭证，并行执行中..."
+        })
+
+        # Use parallel verification with progress callback
+        async def progress_callback(completed: int, total: int, filename: str, success: bool):
+            if self._on_progress:
+                await self._on_progress(completed, total, filename, success)
+
+        batch_results = await self._client.verify_credentials_batch(
+            all_creds,
+            progress_callback=progress_callback
+        )
+
+        # Process results and add to history
+        results = []
+        success_count = 0
+        fail_count = 0
+        for item in batch_results:
+            filename = item.get("filename", "")
+            success = item.get("success", False)
+            result = item.get("result", {})
+            message = result.get("message", "")
+
+            results.append({
+                "filename": filename,
+                "success": success,
+                "message": message,
+            })
+
+            if success:
+                success_count += 1
+            else:
+                fail_count += 1
+
+            await self._add_history({
+                "type": "verify",
+                "filename": filename,
+                "success": success,
+                "message": message if message else ("检验成功" if success else "检验失败"),
+            })
+
+        await self._add_history({
+            "type": "info",
+            "message": f"立即检验完成: 成功 {success_count} 个, 失败 {fail_count} 个"
+        })
 
         return {
             "success": True,
