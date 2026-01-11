@@ -1,4 +1,4 @@
-short_hash=a10d00d
-full_hash=a10d00d97b2071ccdc2dda94355dda8ec135dc6d
-message=新增版本自动更新 workflow 和修复 tabs 布局
-date=2026-01-11 15:05:45 +0800
+short_hash=097f61a
+full_hash=097f61af8c69ed9828fa07e28ba71d569955514a
+message=修复版本显示和 Loading 居中问题
+date=2026-01-11 15:17:51 +0800
