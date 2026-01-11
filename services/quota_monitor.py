@@ -72,6 +72,34 @@ class QuotaMonitorService:
         finally:
             self._refreshing = False
 
+    async def get_quotas_paginated(
+        self, page: int = 1, page_size: int = 9, force_refresh: bool = False
+    ) -> Dict[str, Any]:
+        """Get quotas with pagination - fetches only the requested page"""
+        if not self._client:
+            return {"success": False, "message": "Not connected", "data": [], "total": 0}
+
+        try:
+            result = await self._client.get_quotas_paginated(page=page, page_size=page_size)
+            return {
+                "success": True,
+                "data": result["items"],
+                "total": result["total"],
+                "page": result["page"],
+                "page_size": result["page_size"],
+                "total_pages": result["total_pages"],
+                "cached": False,
+                "cache_time": datetime.now().isoformat(),
+            }
+        except Exception as e:
+            logger.error(f"Failed to get paginated quotas: {e}")
+            return {
+                "success": False,
+                "message": str(e),
+                "data": [],
+                "total": 0,
+            }
+
     def get_status(self) -> Dict[str, Any]:
         return {
             "cache_valid": self.is_cache_valid,

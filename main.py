@@ -357,6 +357,19 @@ async def api_refresh_quota():
     return result
 
 
+@app.get("/api/quota/paginated")
+async def api_get_quota_paginated(page: int = 1, page_size: int = 9, refresh: bool = False):
+    """Get quotas with backend pagination"""
+    if not api_client:
+        raise HTTPException(status_code=400, detail="Not connected")
+    result = await quota_monitor_service.get_quotas_paginated(
+        page=page,
+        page_size=page_size,
+        force_refresh=refresh
+    )
+    return result
+
+
 @app.get("/api/status")
 async def api_status():
     return {

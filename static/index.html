@@ -686,16 +686,26 @@
         // Pagination state
         let currentPage = 1;
         let pageSize = 9;
+        let quotaPagination = { total: 0, totalPages: 1 };
+        let useFullData = false;  // Switch to full data mode when filtering/sorting
 
-        function setPageSize(size) {
+        async function setPageSize(size) {
             pageSize = size;
             currentPage = 1;
-            renderQuota(quotaData);
+            if (useFullData) {
+                renderQuota(quotaData);
+            } else {
+                await loadQuotaPaginated(1);
+            }
         }
 
-        function goToPage(page) {
+        async function goToPage(page) {
             currentPage = page;
-            renderQuota(quotaData);
+            if (useFullData) {
+                renderQuota(quotaData);
+            } else {
+                await loadQuotaPaginated(page);
+            }
         }
 
         // localStorage keys
@@ -1275,15 +1285,33 @@
         }
 
         async function loadQuota() {
+            // Initial load uses paginated API for fast first page
+            currentPage = 1;
+            useFullData = false;
+            await loadQuotaPaginated(1);
+        }
+
+        async function loadQuotaPaginated(page) {
             const container = document.getElementById('quota-cards');
             if (container) {
                 container.innerHTML = '<div class="flex flex-col items-center justify-center min-h-[300px]"><div class="animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div><div class="text-slate-500 mt-2">加载中...</div></div>';
             }
             try {
-                const data = await api('/api/quota');
-                quotaData = data;
-                updateFilterOptions();
-                renderQuota(data);
+                const data = await api(`/api/quota/paginated?page=${page}&page_size=${pageSize}`);
+                // Store pagination metadata
+                quotaPagination = {
+                    total: data.total || 0,
+                    totalPages: data.total_pages || 1
+                };
+                currentPage = data.page || page;
+                // Wrap page data in quotaData format for rendering
+                quotaData = {
+                    success: data.success,
+                    data: data.data || [],
+                    cache_time: data.cache_time,
+                    cached: data.cached
+                };
+                renderQuotaPaginated(quotaData);
             } catch (e) {
                 if (container) {
                     container.innerHTML = '<div class="text-center text-red-500 py-8">加载失败: ' + e.message + '</div>';
@@ -1292,10 +1320,17 @@
         }
 
         async function refreshQuota() {
+            // Refresh loads all data (for filtering/sorting support)
             setLoading('btn-refresh-quota', true);
             try {
                 const data = await api('/api/quota/refresh', { method: 'POST' });
                 quotaData = data;
+                useFullData = true;
+                quotaPagination = {
+                    total: data.data?.length || 0,
+                    totalPages: Math.ceil((data.data?.length || 0) / pageSize)
+                };
+                currentPage = 1;
                 updateFilterOptions();
                 renderQuota(data);
             } finally {
@@ -1324,8 +1359,166 @@
             return quotas.length > 0 ? quotas.reduce((a, b) => a + b, 0) / quotas.length : 1;
         }
 
-        function applyFilter() { renderQuota(quotaData); }
-        function applySort() { renderQuota(quotaData); }
+        async function applyFilter() {
+            const filterValue = document.getElementById('quota-filter').value;
+            if (!useFullData && filterValue !== 'all') {
+                // Need full data for filtering, load all
+                await loadFullQuotaData();
+            }
+            renderQuota(quotaData);
+        }
+
+        async function applySort() {
+            const sortValue = document.getElementById('quota-sort').value;
+            if (!useFullData && sortValue !== 'default') {
+                // Need full data for non-default sorting
+                await loadFullQuotaData();
+            }
+            renderQuota(quotaData);
+        }
+
+        async function loadFullQuotaData() {
+            const container = document.getElementById('quota-cards');
+            if (container) {
+                container.innerHTML = '<div class="flex flex-col items-center justify-center min-h-[300px]"><div class="animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div><div class="text-slate-500 mt-2">加载全部数据...</div></div>';
+            }
+            try {
+                const data = await api('/api/quota');
+                quotaData = data;
+                useFullData = true;
+                quotaPagination = {
+                    total: data.data?.length || 0,
+                    totalPages: Math.ceil((data.data?.length || 0) / pageSize)
+                };
+                currentPage = 1;
+                updateFilterOptions();
+            } catch (e) {
+                if (container) {
+                    container.innerHTML = '<div class="text-center text-red-500 py-8">加载失败: ' + e.message + '</div>';
+                }
+            }
+        }
+
+        function renderQuotaPaginated(data) {
+            // Render for backend pagination mode - no filtering/sorting, uses quotaPagination metadata
+            const cacheInfo = document.getElementById('quota-cache-info');
+            if (data && data.cache_time) {
+                const time = new Date(data.cache_time).toLocaleString();
+                cacheInfo.textContent = `缓存: ${time}${data.cached ? '' : ' (已刷新)'}`;
+            }
+
+            const container = document.getElementById('quota-cards');
+            if (!data || !data.success || !data.data || data.data.length === 0) {
+                container.innerHTML = '<div class="text-slate-400 py-8 text-center">暂无凭证数据，请先连接并刷新</div>';
+                return;
+            }
+
+            if (currentLayout === 'compact') {
+                renderCompactLayout(container, data.data);
+            } else {
+                renderDetailLayoutPaginated(container, data.data);
+            }
+
+            updateModelFilterList();
+        }
+
+        function renderDetailLayoutPaginated(container, data) {
+            // Render detail layout using backend pagination metadata
+            const visibleModels = getVisibleModels();
+            const totalItems = quotaPagination.total;
+            const totalPages = quotaPagination.totalPages;
+
+            // Build cards HTML - data is already the current page
+            const cardsHtml = data.map(cred => {
+                const quota = cred.quota || {};
+                const models = quota.models || {};
+                const minQuota = getMinQuota(cred);
+                const cardClass = minQuota < 0.2 ? 'danger' : minQuota < 0.5 ? 'warning' : '';
+
+                const modelItems = Object.entries(models)
+                    .filter(([name]) => visibleModels === null || visibleModels.includes(name))
+                    .map(([name, info]) => {
+                        const pct = info.remaining !== undefined ? Math.round(info.remaining * 100) : 100;
+                        const colorClass = pct > 50 ? 'quota-high' : pct > 20 ? 'quota-medium' : 'quota-low';
+                        const pctColor = pct > 50 ? 'text-green-600' : pct > 20 ? 'text-yellow-600' : 'text-red-600';
+                        const resetTime = info.resetTime || '';
+                        return `
+                            <div class="model-item" title="${resetTime ? '重置: ' + resetTime : ''}">
+                                <div class="model-name" title="${name}">${name}</div>
+                                <div class="model-quota">
+                                    <div class="quota-bar"><div class="quota-fill ${colorClass}" style="width: ${pct}%"></div></div>
+                                    <span class="quota-pct ${pctColor}">${pct}%</span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
+                const statusBadge = cred.disabled
+                    ? '<span class="badge badge-danger">禁用</span>'
+                    : minQuota < 0.2
+                        ? '<span class="badge badge-warning">⚠️ 低</span>'
+                        : '<span class="badge badge-success">正常</span>';
+
+                return `
+                    <div class="quota-card ${cardClass}">
+                        <div class="quota-card-header">
+                            <div class="flex-1 min-w-0 mr-2">
+                                <div class="quota-card-title" title="${cred.filename}">${cred.filename.replace('.json', '')}</div>
+                                <div class="quota-card-email" title="${cred.user_email || ''}">${cred.user_email || ''}</div>
+                            </div>
+                            ${statusBadge}
+                        </div>
+                        <div class="model-grid">
+                            ${modelItems || '<div class="text-xs text-slate-400">无额度信息</div>'}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Build pagination HTML using backend metadata
+            let paginationHtml = '';
+            if (totalPages > 1) {
+                const pageButtons = [];
+
+                pageButtons.push(`<button class="page-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>上一页</button>`);
+
+                const maxVisiblePages = 5;
+                let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+                let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+                if (endPage - startPage < maxVisiblePages - 1) {
+                    startPage = Math.max(1, endPage - maxVisiblePages + 1);
+                }
+
+                if (startPage > 1) {
+                    pageButtons.push(`<button class="page-btn" onclick="goToPage(1)">1</button>`);
+                    if (startPage > 2) pageButtons.push(`<span class="page-info">...</span>`);
+                }
+
+                for (let i = startPage; i <= endPage; i++) {
+                    pageButtons.push(`<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="goToPage(${i})">${i}</button>`);
+                }
+
+                if (endPage < totalPages) {
+                    if (endPage < totalPages - 1) pageButtons.push(`<span class="page-info">...</span>`);
+                    pageButtons.push(`<button class="page-btn" onclick="goToPage(${totalPages})">${totalPages}</button>`);
+                }
+
+                pageButtons.push(`<button class="page-btn" onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>下一页</button>`);
+                pageButtons.push(`<span class="page-info">共 ${totalItems} 个凭证</span>`);
+
+                paginationHtml = `<div class="pagination">${pageButtons.join('')}</div>`;
+            } else if (totalItems > 0) {
+                paginationHtml = `<div class="pagination"><span class="page-info">共 ${totalItems} 个凭证</span></div>`;
+            }
+
+            container.className = 'card-grid';
+            container.innerHTML = cardsHtml;
+
+            const paginationContainer = document.getElementById('quota-pagination');
+            if (paginationContainer) {
+                paginationContainer.innerHTML = paginationHtml;
+            }
+        }
 
         function renderQuota(data) {
             const cacheInfo = document.getElementById('quota-cache-info');

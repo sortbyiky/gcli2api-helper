@@ -103,6 +103,50 @@ class GcliApiClient:
                 })
         return results
 
+    async def get_quotas_paginated(
+        self, page: int = 1, page_size: int = 9
+    ) -> Dict[str, Any]:
+        """Get quotas with pagination support"""
+        creds = await self.get_credentials(mode="antigravity")
+        items = creds.get("items", [])
+        total = len(items)
+        total_pages = (total + page_size - 1) // page_size if page_size > 0 else 1
+
+        # Paginate items
+        start_idx = (page - 1) * page_size
+        end_idx = min(start_idx + page_size, total)
+        page_items = items[start_idx:end_idx]
+
+        results = []
+        for item in page_items:
+            filename = item.get("filename")
+            if not filename:
+                continue
+            try:
+                quota = await self.get_credential_quota(filename)
+                results.append({
+                    "filename": filename,
+                    "user_email": item.get("user_email", ""),
+                    "disabled": item.get("disabled", False),
+                    "quota": quota,
+                })
+            except Exception as e:
+                logger.warning(f"Failed to get quota for {filename}: {e}")
+                results.append({
+                    "filename": filename,
+                    "user_email": item.get("user_email", ""),
+                    "disabled": item.get("disabled", False),
+                    "quota": {"success": False, "error": str(e)},
+                })
+
+        return {
+            "items": results,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+        }
+
     async def test_connection(self) -> Dict[str, Any]:
         """Test connection to gcli2api"""
         url = f"{self.base_url}/version/info"
