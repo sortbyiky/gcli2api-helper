@@ -486,12 +486,14 @@
         <div id="panel-logs" class="tab-panel hidden">
             <div class="card">
                 <div class="flex flex-wrap justify-between items-center mb-5 gap-3">
-                    <h2 class="card-header mb-0">📋 检验日志</h2>
+                    <h2 class="card-header mb-0">📋 实时日志</h2>
                     <div class="flex flex-wrap gap-3 items-center">
                         <select id="log-filter" onchange="filterLogs()" class="w-auto">
-                            <option value="all">全部</option>
-                            <option value="success">成功</option>
-                            <option value="failed">失败</option>
+                            <option value="all">全部日志</option>
+                            <option value="gcli2api">gcli2api 日志</option>
+                            <option value="verify">检验日志</option>
+                            <option value="warning">警告</option>
+                            <option value="error">错误</option>
                         </select>
                         <label class="flex items-center gap-2 text-sm text-slate-600">
                             <input type="checkbox" id="log-auto-scroll" checked>
@@ -824,10 +826,14 @@
             const filter = document.getElementById('log-filter').value;
             if (filter === 'all') {
                 filteredLogs = [...allLogs];
-            } else if (filter === 'success') {
-                filteredLogs = allLogs.filter(log => log.success === true);
-            } else if (filter === 'failed') {
-                filteredLogs = allLogs.filter(log => log.success === false);
+            } else if (filter === 'gcli2api') {
+                filteredLogs = allLogs.filter(log => log.type === 'gcli2api' || log.source === 'gcli2api');
+            } else if (filter === 'verify') {
+                filteredLogs = allLogs.filter(log => log.type === 'verify' || log.success !== undefined);
+            } else if (filter === 'warning') {
+                filteredLogs = allLogs.filter(log => log.type === 'warning' || (log.message && log.message.includes('[WARNING]')));
+            } else if (filter === 'error') {
+                filteredLogs = allLogs.filter(log => log.type === 'error' || log.success === false || (log.message && log.message.includes('[ERROR]')));
             }
             displayLogs();
         }
@@ -843,8 +849,40 @@
             }
 
             container.innerHTML = filteredLogs.map(log => {
-                const time = new Date(log.timestamp).toLocaleString();
                 const type = log.type || 'verify';
+
+                // For gcli2api logs, display the raw message directly
+                if (type === 'gcli2api' && log.message) {
+                    const msg = log.message;
+                    let statusClass = 'log-gcli2api';
+
+                    // Parse log level from message
+                    if (msg.includes('[ERROR]')) {
+                        statusClass = 'log-error';
+                    } else if (msg.includes('[WARNING]')) {
+                        statusClass = 'log-warning';
+                    } else if (msg.includes('[INFO]')) {
+                        statusClass = 'log-info';
+                    }
+
+                    // Highlight specific patterns
+                    let formattedMsg = msg
+                        .replace(/\[INFO\]/g, '<span class="text-blue-400">[INFO]</span>')
+                        .replace(/\[WARNING\]/g, '<span class="text-yellow-400">[WARNING]</span>')
+                        .replace(/\[ERROR\]/g, '<span class="text-red-400">[ERROR]</span>')
+                        .replace(/\[ANTHROPIC\]/g, '<span class="text-purple-400">[ANTHROPIC]</span>')
+                        .replace(/\[ANTIGRAVITY[^\]]*\]/g, '<span class="text-green-400">$&</span>')
+                        .replace(/\[GEMINICLI[^\]]*\]/g, '<span class="text-cyan-400">$&</span>')
+                        .replace(/input_tokens=(\d+)/g, 'input_tokens=<span class="text-emerald-400">$1</span>')
+                        .replace(/output_tokens=(\d+)/g, 'output_tokens=<span class="text-amber-400">$1</span>')
+                        .replace(/模型: ([^\s,]+)/g, '模型: <span class="text-pink-400">$1</span>')
+                        .replace(/status=(\d+)/g, 'status=<span class="text-red-400">$1</span>');
+
+                    return `<div class="${statusClass}">${formattedMsg}</div>`;
+                }
+
+                // For other logs (verify, helper, etc.)
+                const time = new Date(log.timestamp).toLocaleString();
                 let statusClass = 'log-info';
                 let statusText = 'INFO';
 
@@ -854,9 +892,6 @@
                 } else if (type === 'warning') {
                     statusClass = 'log-warning';
                     statusText = 'WARNING';
-                } else if (type === 'gcli2api') {
-                    statusClass = 'log-gcli2api';
-                    statusText = 'GCLI';
                 } else if (type === 'info') {
                     statusClass = 'log-info';
                     statusText = 'INFO';
