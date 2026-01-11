@@ -1,4 +1,4 @@
-short_hash=c353bc9
-full_hash=c353bc9f01581ef2c8782a0dfa5d18fa52b1d886
-message=新增后端分页 API 支持凭证监控按需加载
-date=2026-01-11 16:18:37 +0800
+short_hash=b79cdf8
+full_hash=b79cdf888412ee4a793f880b88e4f5a7026ea188
+message=为简洁模式添加分页支持并重构分页代码
+date=2026-01-11 16:25:18 +0800
