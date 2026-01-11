@@ -32,7 +32,7 @@ class GcliApiClient:
         self,
         status_filter: str = "all",
         error_code_filter: str = "all",
-        mode: str = "geminicli",
+        mode: str = "antigravity",
         offset: int = 0,
         limit: int = 1000,
     ) -> Dict[str, Any]:
@@ -50,17 +50,17 @@ class GcliApiClient:
         resp.raise_for_status()
         return resp.json()
 
-    async def get_disabled_credentials(self, mode: str = "geminicli") -> List[Dict[str, Any]]:
+    async def get_disabled_credentials(self, mode: str = "antigravity") -> List[Dict[str, Any]]:
         """Get only disabled credentials"""
         result = await self.get_credentials(status_filter="disabled", mode=mode)
         return result.get("items", [])
 
-    async def get_all_credentials(self, mode: str = "geminicli") -> List[Dict[str, Any]]:
+    async def get_all_credentials(self, mode: str = "antigravity") -> List[Dict[str, Any]]:
         """Get all credentials (no status filter)"""
         result = await self.get_credentials(status_filter="all", mode=mode)
         return result.get("items", [])
 
-    async def verify_credential(self, filename: str, mode: str = "geminicli") -> Dict[str, Any]:
+    async def verify_credential(self, filename: str, mode: str = "antigravity") -> Dict[str, Any]:
         """Verify a single credential"""
         url = f"{self.base_url}/creds/verify-project/{filename}"
         params = {"token": self.token, "mode": mode}
