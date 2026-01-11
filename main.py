@@ -31,6 +31,9 @@ _session_token: Optional[str] = None
 # SSE clients management
 sse_clients: List[asyncio.Queue] = []
 
+# Background task for quota auto-refresh
+_quota_refresh_task: Optional[asyncio.Task] = None
+
 # Cache for git version info (populated at startup)
 _git_version_cache: Optional[Dict[str, str]] = None
 
@@ -90,9 +93,31 @@ async def broadcast_log(log_entry: dict):
     """Broadcast new log to all SSE clients"""
     for queue in sse_clients:
         try:
-            await queue.put(log_entry)
+            await queue.put({"type": "log", "data": log_entry})
         except Exception:
             pass
+
+
+async def broadcast_quota(quota_data: dict):
+    """Broadcast quota update to all SSE clients"""
+    for queue in sse_clients:
+        try:
+            await queue.put({"type": "quota", "data": quota_data})
+        except Exception:
+            pass
+
+
+async def quota_refresh_loop():
+    """Background task to refresh quota data every minute and push to clients"""
+    while True:
+        await asyncio.sleep(60)  # Wait 1 minute
+        if api_client and sse_clients:
+            try:
+                data = await quota_monitor_service.get_all_quotas(force_refresh=True)
+                await broadcast_quota(data)
+                logger.debug("Quota data refreshed and pushed to clients")
+            except Exception as e:
+                logger.warning(f"Failed to refresh quota: {e}")
 
 
 # Set SSE callback for auto_verify_service and log_forwarder
@@ -113,6 +138,13 @@ async def lifespan(app: FastAPI):
     yield
     # Cleanup
     logger.info("gcli2api-helper shutting down...")
+    # Stop quota refresh task
+    if _quota_refresh_task and not _quota_refresh_task.done():
+        _quota_refresh_task.cancel()
+        try:
+            await _quota_refresh_task
+        except asyncio.CancelledError:
+            pass
     await auto_verify_service.stop()
     await log_forwarder.disconnect()
     if api_client:
@@ -143,7 +175,7 @@ class ConfigRequest(BaseModel):
 # --- Helper Functions ---
 
 async def connect_to_gcli():
-    global api_client
+    global api_client, _quota_refresh_task
     if api_client:
         await api_client.close()
     api_client = GcliApiClient(config.gcli_url)
@@ -163,6 +195,11 @@ async def connect_to_gcli():
             config.auto_verify_interval,
             config.auto_verify_error_codes
         )
+
+    # Start quota auto-refresh background task
+    if _quota_refresh_task is None or _quota_refresh_task.done():
+        _quota_refresh_task = asyncio.create_task(quota_refresh_loop())
+        logger.info("Quota auto-refresh task started")
 
 
 # --- Routes ---
@@ -282,7 +319,7 @@ async def api_verify_history():
 
 @app.get("/api/verify/logs/stream")
 async def api_logs_stream(request: Request):
-    """SSE endpoint for real-time log streaming"""
+    """SSE endpoint for real-time log streaming and quota updates"""
     queue = asyncio.Queue()
     sse_clients.append(queue)
 
@@ -293,15 +330,39 @@ async def api_logs_stream(request: Request):
                 "event": "init",
                 "data": json.dumps(auto_verify_service.history)
             }
+            # Send initial quota data if connected
+            if api_client:
+                try:
+                    quota_data = await quota_monitor_service.get_all_quotas(force_refresh=False)
+                    yield {
+                        "event": "quota_init",
+                        "data": json.dumps(quota_data)
+                    }
+                except Exception as e:
+                    logger.debug(f"Failed to send initial quota: {e}")
             while True:
                 if await request.is_disconnected():
                     break
                 try:
-                    data = await asyncio.wait_for(queue.get(), timeout=30)
-                    yield {
-                        "event": "log",
-                        "data": json.dumps(data)
-                    }
+                    msg = await asyncio.wait_for(queue.get(), timeout=30)
+                    # Handle different message types
+                    if isinstance(msg, dict) and "type" in msg:
+                        if msg["type"] == "log":
+                            yield {
+                                "event": "log",
+                                "data": json.dumps(msg["data"])
+                            }
+                        elif msg["type"] == "quota":
+                            yield {
+                                "event": "quota_update",
+                                "data": json.dumps(msg["data"])
+                            }
+                    else:
+                        # Legacy format compatibility
+                        yield {
+                            "event": "log",
+                            "data": json.dumps(msg)
+                        }
                 except asyncio.TimeoutError:
                     # Send heartbeat to keep connection alive
                     yield {"event": "heartbeat", "data": ""}

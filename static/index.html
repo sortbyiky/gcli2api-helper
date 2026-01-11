@@ -921,6 +921,18 @@
                 updateSSEStatus('connected');
             });
 
+            // Handle initial quota data on SSE connect
+            eventSource.addEventListener('quota_init', (e) => {
+                const data = JSON.parse(e.data);
+                handleQuotaData(data, false);
+            });
+
+            // Handle quota updates pushed from server
+            eventSource.addEventListener('quota_update', (e) => {
+                const data = JSON.parse(e.data);
+                handleQuotaData(data, true);
+            });
+
             eventSource.addEventListener('log', (e) => {
                 const log = JSON.parse(e.data);
                 allLogs.unshift(log);
@@ -941,6 +953,46 @@
             eventSource.onopen = () => {
                 updateSSEStatus('connected');
             };
+        }
+
+        // Handle quota data from SSE (init or update)
+        function handleQuotaData(data, isUpdate) {
+            if (!data || !data.success) return;
+
+            // Store full data
+            quotaData = data;
+            useFullData = true;
+            quotaPagination = {
+                total: data.data?.length || 0,
+                totalPages: Math.ceil((data.data?.length || 0) / pageSize)
+            };
+
+            // Update filter options
+            updateFilterOptions();
+
+            // Re-render if on credentials tab
+            const credentialsPanel = document.getElementById('panel-credentials');
+            if (credentialsPanel && !credentialsPanel.classList.contains('hidden')) {
+                renderQuota(data);
+            }
+
+            // Show update indicator if it's a push update
+            if (isUpdate) {
+                showQuotaUpdateIndicator();
+            }
+        }
+
+        // Show a brief indicator when quota data is updated
+        function showQuotaUpdateIndicator() {
+            const cacheInfo = document.getElementById('quota-cache-info');
+            if (cacheInfo) {
+                const time = new Date().toLocaleString();
+                cacheInfo.textContent = `已更新: ${time}`;
+                cacheInfo.style.color = '#22c55e';
+                setTimeout(() => {
+                    cacheInfo.style.color = '';
+                }, 2000);
+            }
         }
 
         function updateSSEStatus(status) {
@@ -972,7 +1024,11 @@
 
             // Refresh data when switching tabs
             if (tab === 'credentials') {
-                loadQuota();
+                // Credentials tab: use cached data from SSE, just re-render if data exists
+                if (quotaData && quotaData.data && quotaData.data.length > 0) {
+                    renderQuota(quotaData);
+                }
+                // Data will be loaded via SSE (quota_init/quota_update events)
             } else if (tab === 'stats') {
                 refreshStats();
             }
@@ -1027,7 +1083,9 @@
                 if (data.success) {
                     updateConnectionStatus(true);
                     loadVerifyStatus();
-                    loadQuota();
+                    // Quota data will be pushed via SSE, no need to call loadQuota()
+                    // Reconnect SSE to get initial quota data
+                    connectSSE();
                 } else {
                     alert('连接失败: ' + (data.detail || data.message));
                 }
